@@ -254,11 +254,7 @@ if __name__ == "__main__":
     try:
         logger.info("Trying to connect SSH remote Zimbra Server")
         z = Zimbra()
-        logger.info("Test retrieve resources from remote Zimbra Server")
-        test1 = z.extract_resource(settings.ADMIN_ACCOUNT, '/Calendar', 'ics')
-        test2 = z.extract_resource(settings.ADMIN_ACCOUNT, '/Contacts', 'csv')
-        if test1 is None or test2 is None:
-            sys.exit("Aborted")
+
 
     except Exception as e:
         logger.error(e)
@@ -269,13 +265,20 @@ if __name__ == "__main__":
     threads = list()
     try:
         df = pd.read_csv(file, header=None, index_col=False)
-        logger.info('Processing {0} accounts for migration'.format(df.size))
+
         if df.size > 0:
             line = 0
             for index, row in df.iterrows():
                 line +=1
                 if not re.match(r"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)", row[0]):
-                    sys.exit("Line contains invalid format: {}".format(row[0]))
+                    sys.exit("Line #{} contains invalid format: {}".format(line,row[0]))
+                if line==1:
+                    logger.info("Test retrieve resources from remote Zimbra Server")
+                    status1, _ = z.extract_resource(row[0], '/Calendar', 'ics')
+                    status2, _ = z.extract_resource(row[0], '/Contacts', 'csv')
+                    if not status1 or not status2:
+                        sys.exit("Aborted")
+
                 account = str(row[0])
                 th = threading.Thread(name=account, target=task, args=(account,))
                 th.daemon = True
