@@ -181,14 +181,12 @@ def process_account(account):
     status_cont=False
     start_time = time.time()
     try:
-        a_zimbra = 'diego@zimbra-testes.us-central1-a.c.bedu-tech-lab.internal'
-        a_google = 'diego@demo.bedu.tech'
 
         database = Database()
         zimbra = Zimbra()
-        google = Google(a_google)
+        google = Google(account)
 
-        status, data = zimbra.load_data_from_account(account=a_zimbra)
+        status, data = zimbra.load_data_from_account(account=account)
         if status:
             total_contact = 0
             for resource in data['contact']:
