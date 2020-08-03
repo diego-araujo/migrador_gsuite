@@ -196,15 +196,17 @@ class Google:
         if validate():
             # To access this account we need to delegate access using Google API
             if delegate():
+                try:
+                    # Calendar Token
+                    self._service_calendar = build('calendar', 'v3', http=self.dc.authorize(Http()), cache_discovery=False)
 
-                # Calendar Token
-                self._service_calendar = build('calendar', 'v3', http=self.dc.authorize(Http()), cache_discovery=False)
-
-                # Contacts Token
-                self.service_contacs = ContactsClient(source='contacts_handler')
-                self.auth_token = gauth.OAuth2TokenFromCredentials(self.dc)
-                self.auth_token.authorize(self.service_contacs)
-                self.feed = ''
+                    # Contacts Token
+                    self.service_contacs = ContactsClient(source='contacts_handler')
+                    self.auth_token = gauth.OAuth2TokenFromCredentials(self.dc)
+                    self.auth_token.authorize(self.service_contacs)
+                    self.feed = ''
+                except:
+                    logger.exception('Problem when trying to access ' + self.account + ' account, check it in the logs later.')
 
             else:
                 print ('Problem when trying to access ' + self.account + ' account, check it in the logs later.')
