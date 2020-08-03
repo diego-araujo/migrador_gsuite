@@ -19,7 +19,7 @@ from icalendar import Calendar
 from icalendar.parser import Contentlines
 from pytz import timezone
 
-__author__ = 'eisinger@usp.br'
+__author__ = 'diego@bedu.tech'
 
 from exception import ProcessException
 

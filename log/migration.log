@@ -560,3 +560,10 @@ TypeError: list indices must be integers or slices, not str
 20200802142237 - [CLIENT][INFO][<module>] - Processing 1 accounts for migration
 20200802142237 - [CLIENT][INFO][task] - Start process for diego@demo.bedu.tech
 20200802142513 - [CLIENT][INFO][process_account] - Start process migrate Contacts for diego@demo.bedu.tech
+20200803105952 - [CLIENT][INFO][<module>] - Trying to connect SSH remote Zimbra Server
+20200803105956 - [CLIENT][INFO][<module>] - Processing 1 accounts for migration
+20200803105956 - [CLIENT][INFO][task] - Start process for diego@demo.bedu.tech
+20200803110051 - [CLIENT][INFO][process_account] - Start process migrate Contacts for diego@demo.bedu.tech
+20200803110055 - [CLIENT][INFO][process_account] - Process completed for diego@demo.bedu.tech
+20200803110055 - [CLIENT][INFO][task] - Exiting process for diego@demo.bedu.tech
+20200803110057 - [CLIENT][INFO][send] - Report has been sent to diegolpsaraujo@gmail.com
