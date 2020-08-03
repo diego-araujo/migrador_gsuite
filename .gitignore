@@ -2,6 +2,7 @@
 .gitignore
 json/
 /credentials/google.json
+
 /log/migration.log
 
 gsuite_migration.db
