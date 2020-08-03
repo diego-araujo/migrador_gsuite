@@ -32,7 +32,7 @@ RUNNING = 'running.lock'
 def reset_previously_migrated_calendars(google, database):
     previously_migrated_calendars = database.get_resources(account=google.account, type='A', status='C')
     if len(previously_migrated_calendars)>0:
-        print("reset_previously_migrated_calendars account[{0}]".format(previously_migrated_calendars[0]['account']))
+        logger.info("reset_previously_migrated_calendars account[{0}]".format(previously_migrated_calendars[0]['account']))
     for cal in previously_migrated_calendars:
         resp = google.delete_cal(calendarId=cal['resource_google_id'])
         if resp:
@@ -41,7 +41,7 @@ def reset_previously_migrated_calendars(google, database):
 def reset_previously_migrated_contacts(google, database):
     previously_migrated_contact = database.get_resources(account=google.account, type='C', status='C')
     if len(previously_migrated_contact) > 0:
-        print("reset_previously_migrated_contacts account[{0}]".format(previously_migrated_contact[0]['account']))
+        logger.info("reset_previously_migrated_contacts account[{0}]".format(previously_migrated_contact[0]['account']))
 
     for cts in previously_migrated_contact:
         resp = google.remove_group(cts['resource_google_id'])
@@ -276,6 +276,8 @@ if __name__ == "__main__":
                     logger.info("Test retrieve resources from remote Zimbra Server")
                     status1, _ = z.extract_resource(row[0], '/Calendar', 'ics')
                     status2, _ = z.extract_resource(row[0], '/Contacts', 'csv')
+                    if status1 and status2:
+                        logger.info('Everything looks fine, lets start')
                     if not status1 or not status2:
                         sys.exit("Aborted")
 
