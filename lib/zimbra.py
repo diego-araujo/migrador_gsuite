@@ -82,7 +82,7 @@ class Zimbra:
         return None
 
     def extract_resource(self, account, folder, format):
-        bash = os.path.dirname(os.path.abspath(__file__))+'/lib/zmmailbox.sh'
+        bash = os.path.dirname(os.path.abspath(__file__))+'/zmmailbox.sh'
         command = [bash, account, folder, format]
         response = check_output(command)
         response = str(response.rstrip(), "utf-8")
