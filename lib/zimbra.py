@@ -44,7 +44,8 @@ class Zimbra:
                 self.ssh.connect(self._data['ssh_server'], username=self._data['ssh_user'],
                                  key_filename=self._data['ssh_privatekey'])
             else:
-                self.ssh.connect(self._data['ssh_server'], username=self._data['ssh_user'], password=self._data['ssh_pwd'])
+                #self.ssh.connect(self._data['ssh_server'], username=self._data['ssh_user'], password=self._data['ssh_pwd'])
+                self.ssh.connect(self._data['ssh_server'])
 
 
             # CALENDAR SETTINGS
