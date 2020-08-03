@@ -1,5 +1,6 @@
 /venv/
 .gitignore
 json/
-/credentials/
+/credentials/google.json
+/log/migration.log
 gsuite_migration.db
