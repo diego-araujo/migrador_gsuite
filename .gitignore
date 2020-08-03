@@ -1,0 +1,5 @@
+/venv/
+.gitignore
+json/
+/credentials/
+gsuite_migration.db
