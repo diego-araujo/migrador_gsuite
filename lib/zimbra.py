@@ -127,14 +127,14 @@ class Zimbra:
                         if "ownerId" in item:
                             continue
                         else:
-                            result, ical, evt_attendees = self.get_events(account=account,calendar_path=item['name'], tz=resources['timezone'])
+                            result, ical, evt_attendees = self.get_events(account=account,calendar_path=item['pathURLEncoded'], tz=resources['timezone'])
                             resource_item = {'status': result,
                                              'resource': item,
                                              'events': {'ical': ical, 'event_attendees': evt_attendees}}
                             resources['calendar'].append(resource_item)
 
                     elif item['defaultView'] == "contact" and item['itemCount'] > 0:
-                        result, contacts = self.__get_contacts(account,item['name'])
+                        result, contacts = self.__get_contacts(account,item['pathURLEncoded'])
                         resource_item = {'status': result,
                                          'resource': item,
                                          'contacts': contacts}
@@ -173,7 +173,7 @@ class Zimbra:
             return evt_attendees
         try:
             #output = self.exec_command(['ge', '"' + calendar_path + '"', account])
-            status, output = self.extract_resource(account,'"' + calendar_path + '"','ics')
+            status, output = self.extract_resource(account,calendar_path ,'ics')
             if status:
                 evt_attendees = extract_attendees(output)
                 return True, Calendar.from_ical(output), evt_attendees
@@ -269,7 +269,7 @@ class Zimbra:
         lista = []
         try:
             #output = self.exec_command(['gc', '"' + addrbook + '"', account])
-            status, output = self.extract_resource(account, '"' + addrbook + '"', 'csv')
+            status, output = self.extract_resource(account,  addrbook , 'csv')
             if status:
                 contacts_dict = pandas.read_csv(StringIO(output), header=0, index_col=False, skipinitialspace = True, na_filter=False,quotechar = '"' ).T.to_dict()
                 for idx in contacts_dict:
