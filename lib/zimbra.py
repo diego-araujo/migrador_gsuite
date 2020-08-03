@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 import json
 import logging
+import os
 import socket
 import time
 import traceback
 from datetime import datetime
 from json import JSONDecodeError
 from logging.config import fileConfig
+from subprocess import Popen, PIPE, check_output
 
 import paramiko
 import pandas
@@ -78,8 +80,21 @@ class Zimbra:
         if self.get_galsync():
             return self._data['galsync_alias']
         return None
-    def exec_command(self, attrs):
 
+    def extract_resource(self, account, folder, format):
+        bash = os.path.dirname(os.path.abspath(__file__))+'/lib/zmmailbox.sh'
+        command = [bash, account, folder, format]
+        response = check_output(command)
+        response = str(response.rstrip(), "utf-8")
+        if format=='ics' and not response[0:5] == 'BEGIN':
+            logger.error("Error decode Calendar returned by server [{}]".format(response))
+            return False, response
+        if format == 'csv' and not 'email' in response[0:200]:
+            logger.error("Error decode Contacts returned by server [{}]".format(response))
+            return False, response
+        return True, response
+
+    def exec_command(self, attrs):
         # Remote command to be executed
         cmd = '/usr/bin/python ' + self._data['colector_file'] + ' '  # type: Union[Union[str, unicode], Any]
 
@@ -157,9 +172,13 @@ class Zimbra:
                     """"""
             return evt_attendees
         try:
-            output = self.exec_command(['ge', '"' + calendar_path + '"', account])
-            evt_attendees = extract_attendees(output)
-            return True, Calendar.from_ical(output), evt_attendees
+            #output = self.exec_command(['ge', '"' + calendar_path + '"', account])
+            status, output = self.extract_resource(account,'"' + calendar_path + '"','ics')
+            if status:
+                evt_attendees = extract_attendees(output)
+                return True, Calendar.from_ical(output), evt_attendees
+            else:
+                return False, None, None
         except Exception as err:
             logger.exception("__get_raw_events")
             return False, None, None
@@ -249,11 +268,15 @@ class Zimbra:
         addrbook = addrbook.replace("\\","")
         lista = []
         try:
-            output = self.exec_command(['gc', '"' + addrbook + '"', account])
-            contacts_dict = pandas.read_csv(StringIO(output), header=0, index_col=False, skipinitialspace = True, na_filter=False,quotechar = '"' ).T.to_dict()
-            for idx in contacts_dict:
-                contact= contacts_dict[idx]
-                lista.append(full_list(contact))
+            #output = self.exec_command(['gc', '"' + addrbook + '"', account])
+            status, output = self.extract_resource(account, '"' + addrbook + '"', 'csv')
+            if status:
+                contacts_dict = pandas.read_csv(StringIO(output), header=0, index_col=False, skipinitialspace = True, na_filter=False,quotechar = '"' ).T.to_dict()
+                for idx in contacts_dict:
+                    contact= contacts_dict[idx]
+                    lista.append(full_list(contact))
+            else:
+                return False, None
         except Exception as err:
             logger.exception("__get_contacts")
             return False, None

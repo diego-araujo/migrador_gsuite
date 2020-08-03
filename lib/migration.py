@@ -2,7 +2,7 @@
 from subprocess import PIPE, Popen
 import sys
 
-class ExecuteZimbraCMD():
+class ExecuteZimbraCMD:
     def __init__(self, acc):
         self.account = acc
 
@@ -27,15 +27,17 @@ class ExecuteZimbraCMD():
                 print (''.join(line[4:]) + ',', int(line[3]))
 
     def get_events(self, fld):
-        command = ['sudo', '-u', 'zimbra', '/opt/zimbra/bin/zmmailbox', '-z', '-m', self.account, 'getRestURL',
-                   '/' + fld + '?fmt=ics']
+        if fld[0:1]=='/':
+            fld = fld[1:]
+        command = ['/opt/zimbra/bedutech/zmmailbox.sh', self.account, fld, 'ics']
         events = Popen(command, stdout=PIPE)
         for item in events.stdout:
             print (item.rstrip())
 
     def get_contacts(self, fld):
-        command = ['sudo', '-u', 'zimbra', '/opt/zimbra/bin/zmmailbox', '-z', '-m', self.account, 'getRestURL',
-                   '/' + fld + '?fmt=csv']
+        if fld[0:1] == '/':
+            fld = fld[1:]
+        command = ['/opt/zimbra/bedutech/zmmailbox.sh', self.account, fld, 'csv']
         contacts = Popen(command, stdout=PIPE)
         for item in contacts.stdout:
             print (item.rstrip())

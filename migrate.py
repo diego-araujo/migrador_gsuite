@@ -11,6 +11,7 @@ import json
 import os
 import threading
 
+import settings
 from exception import ProcessException
 from lib.controle import Controle
 from lib.report import Report
@@ -252,7 +253,13 @@ if __name__ == "__main__":
         sys.exit("Cannot open file {}".format(file))
     try:
         logger.info("Trying to connect SSH remote Zimbra Server")
-        Zimbra()
+        z = Zimbra()
+        logger.info("Test retrieve resources from remote Zimbra Server")
+        test1 = z.extract_resource(settings.ADMIN_ACCOUNT, '/Calendar', 'ics')
+        test2 = z.extract_resource(settings.ADMIN_ACCOUNT, '/Contacts', 'csv')
+        if test1 is None or test2 is None:
+            sys.exit("Aborted")
+
     except Exception as e:
         logger.error(e)
         os._exit(1)
