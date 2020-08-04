@@ -110,7 +110,6 @@ def process_contacts(zimbra, google, database, data):
                     _, is_ok = google.format_contact(contact, "dummy-value")
                     if not is_ok:
                         logger.error('Error in validation contact list for {0} entry[{1}]'.format(account,json.dumps(contact)))
-                        return False
             return True
         except Exception as e:
             logger.error('Error in validation contact list for {0} exception[{1}]'.format(account, str(e)))
@@ -209,7 +208,7 @@ def process_account(account):
                     conts=total_contact, status='I')
             logger.debug("Start process migrate calendar for {0}".format(account))
             status_cal, total_events, errors_event = process_calendar(google, database, data)
-            if status_cal:
+            if status_cal and errors_event==0:
                 logger.debug("Calendar were successfully migrated for {0}".format(account))
                 database.update_account(
                     account=account,
