@@ -837,6 +837,7 @@ class Google:
             for evt in evts:
                 batch.add(self._service_calendar.events().insert(calendarId=cal_id, body=evt))
             batch.execute()
+            time.sleep(0.300)
             return True, failed_processing
         except:
             logger.exception("batch_insert_events")
@@ -860,7 +861,7 @@ class Google:
                 count += 1
             response_feed = self.service_contacs.ExecuteBatch(request_feed,
                                                         'https://www.google.com/m8/feeds/contacts/default/full/batch')
-
+            time.sleep(0.300)
             return True, response_feed
 
         except gdata.client.RequestError as e:

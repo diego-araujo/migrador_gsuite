@@ -121,7 +121,7 @@ class Database:
     def insert_resource(self, account, resource_path_zimbra,resource_google_id, resource_type, status):
         controle = Controle()
         sql = 'INSERT INTO resources (uuid,account, resource_path_zimbra, resource_google_id, resource_type, status, date) '
-        sql += "VALUES (?, ?, ?, ?,?, datetime())"
+        sql += "VALUES (?, ?, ?, ?, ?, datetime())"
         values = [controle.get_uuid(),account, resource_path_zimbra,resource_google_id, resource_type, status]
         try:
             cursor = self._conn.cursor()
