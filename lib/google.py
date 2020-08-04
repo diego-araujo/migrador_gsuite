@@ -353,13 +353,13 @@ class Google:
             zimbra_contact_custom_fields = cnt_entry['custom_fields']
 
             # Set the contact's email addresses.
-            if zimbra_contact_default['email'] != '':
+            if zimbra_contact_default.get('email','') != '':
                 google_contact.email.append(data.Email(address=zimbra_contact_default['email'], rel=gdata.data.WORK_REL,
                                                     primary='true', display_name=display_name(zimbra_contact_default)))
-            else:
+            """else:
                 err_ct = 'Impossible to register a contact without an e-mail ' + str(zimbra_contact_default)
                 logger.info(self.error_code['create_ct'] + err_ct)
-                return None, False
+                return None, False"""
 
             # Set the contact's name
             google_contact.name = data.Name(
