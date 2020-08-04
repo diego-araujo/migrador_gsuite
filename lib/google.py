@@ -6,7 +6,7 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from logging.config import fileConfig
-from time import time
+from time import time, sleep
 
 import googleapiclient
 import yaml
@@ -837,7 +837,7 @@ class Google:
             for evt in evts:
                 batch.add(self._service_calendar.events().insert(calendarId=cal_id, body=evt))
             batch.execute()
-            time.sleep(0.300)
+            sleep(0.300)
             return True, failed_processing
         except:
             logger.exception("batch_insert_events")
@@ -861,12 +861,12 @@ class Google:
                 count += 1
             response_feed = self.service_contacs.ExecuteBatch(request_feed,
                                                         'https://www.google.com/m8/feeds/contacts/default/full/batch')
-            time.sleep(0.300)
+            sleep(0.300)
             return True, response_feed
 
         except gdata.client.RequestError as e:
             if e.status == 520:
-                time.sleep(30)
+                sleep(30)
             logger.exception("batch_insert_contacts status = 520")
             return False, response_feed
         except:
