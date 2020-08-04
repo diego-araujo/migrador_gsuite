@@ -55,6 +55,7 @@ def process_calendar(google, database, data):
         reset_previously_migrated_calendars(google, database)
         timezone = data['timezone']
         total_evts = 0
+        errors = 0
         for res in data['calendar']:
             resource = res['resource']
             evts = res['events']['ical']
@@ -93,9 +94,10 @@ def process_calendar(google, database, data):
                         logger.error('[CALENDAR] >> Event: ' + err_dmp)
             if not has_failed:
                 database.update_resource_status(account=google.account, resource_google_id=cal_id, status='C')
-                return True, total_evts
             else:
-                return False, 0
+                logger.error('[CALENDAR] Failed to migrate Agenda ' + str(resource['name']))
+                errors +=1
+        return True, total_evts, errors
     except Exception as e:
         reset_previously_migrated_calendars(google, database)
         raise
@@ -206,7 +208,7 @@ def process_account(account):
                     cals=total_calendar,
                     conts=total_contact, status='I')
             logger.debug("Start process migrate calendar for {0}".format(account))
-            status_cal, total_events = process_calendar(google, database, data)
+            status_cal, total_events, errors_event = process_calendar(google, database, data)
             if status_cal:
                 logger.debug("Calendar were successfully migrated for {0}".format(account))
                 database.update_account(
