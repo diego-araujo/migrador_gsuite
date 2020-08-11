@@ -293,7 +293,7 @@ if __name__ == "__main__":
         os._exit(1)
     arq = open(RUNNING, 'w+')
     arq.close()
-    smphr = threading.Semaphore(value=2)
+    smphr = threading.Semaphore(value=5)
     threads = list()
     try:
         df = pd.read_csv(file, header=None, index_col=False)
