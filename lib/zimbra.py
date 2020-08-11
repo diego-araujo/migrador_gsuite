@@ -122,7 +122,7 @@ class Zimbra:
         try:
             status_acc = self.exec_command(['ms', account])
             if not 'active' in status_acc:
-                logger.error("Error account {0} is not sctive {}".format(account))
+                logger.error("Migration canceled -  account {0} is not active".format(account))
                 return False, None
 
             output = self.exec_command(['gaf', account])
