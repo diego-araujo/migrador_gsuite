@@ -88,7 +88,7 @@ def process_calendar(google, database, data):
                 evento = google.format_event_zimbra_to_google(evt, event_attendees, timezone)
                 if evento:
                     batch_process.append(evento)
-            request_per_group = 100
+            request_per_group = 50
             groups = [batch_process[i:i + request_per_group] for i in
                       range(0, len(batch_process), request_per_group)]
             doing = 1

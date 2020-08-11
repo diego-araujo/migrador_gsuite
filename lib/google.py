@@ -826,7 +826,7 @@ class Google:
             for evt in evts:
                 batch.add(self._service_calendar.events().insert(calendarId=cal_id, body=evt))
             batch.execute()
-            sleep(1.1)
+            sleep(1)
             return True, ok_processing, failed_processing
         except:
             logger.exception("batch_insert_events")
