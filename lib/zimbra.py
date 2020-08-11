@@ -87,7 +87,7 @@ class Zimbra:
         command = [bash, account, folder, format]
         response = check_output(command)
         try:
-            response = str(response.rstrip(), "utf-8", 'replace')
+            response = str(response.rstrip(), "utf-8", 'ignore')
             if format=='ics' and not response[0:5] == 'BEGIN':
                 logger.error("Error decode Calendar returned by server [{}]".format(response))
                 return False, response
