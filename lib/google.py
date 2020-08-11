@@ -539,9 +539,10 @@ class Google:
         """
         try:
             evts = self.get_events(calendarId=calendarId)
-            for evt in evts:
-                self.delete_event(calendarId=calendarId, eventId=evt['id'])
-                sleep(0.050)
+            if not evts is None:
+                for evt in evts:
+                    self.delete_event(calendarId=calendarId, eventId=evt['id'])
+                    sleep(0.050)
 
             self._service_calendar.calendars().delete(calendarId=calendarId).execute()
             return True
