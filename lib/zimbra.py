@@ -86,13 +86,17 @@ class Zimbra:
         bash = os.path.dirname(os.path.abspath(__file__))+'/zmmailbox.sh'
         command = [bash, account, folder, format]
         response = check_output(command)
-        response = str(response.rstrip(), "utf-8")
-        if format=='ics' and not response[0:5] == 'BEGIN':
-            logger.error("Error decode Calendar returned by server [{}]".format(response))
-            return False, response
-        if format == 'csv' and not 'email' in response[0:200]:
+        try:
+            response = str(response.rstrip())
+            if format=='ics' and not response[0:5] == 'BEGIN':
+                logger.error("Error decode Calendar returned by server [{}]".format(response))
+                return False, response
+            if format == 'csv' and not 'email' in response[0:200]:
+                logger.error("Error decode Contacts returned by server [{}]".format(response))
+                return False, response
+        except:
             logger.error("Error decode Contacts returned by server [{}]".format(response))
-            return False, response
+            return False, None
         return True, response
 
     def exec_command(self, attrs):
