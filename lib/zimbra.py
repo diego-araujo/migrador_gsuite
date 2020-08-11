@@ -87,7 +87,7 @@ class Zimbra:
         command = [bash, account, folder, format]
         response = check_output(command)
         try:
-            response = str(response.rstrip(), "utf-8")
+            response = str(response.rstrip(), "utf-8", 'replace')
             if format=='ics' and not response[0:5] == 'BEGIN':
                 logger.error("Error decode Calendar returned by server [{}]".format(response))
                 return False, response
@@ -95,7 +95,7 @@ class Zimbra:
                 logger.error("Error decode Contacts returned by server [{}]".format(response))
                 return False, response
         except:
-            logger.error("Error decode Contacts returned by server [{}]".format(response))
+            logger.error("Error decode Contacts returned by server [{}]".format(response[:50]))
             return False, None
         return True, response
 
