@@ -4,5 +4,6 @@ json/
 /credentials/google.json
 /credentials/zimbra.json
 /log/migration.log
+settings.py
 
 gsuite_migration.db
