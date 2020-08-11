@@ -1,4 +1,5 @@
 import logging
+import sys
 
 import yaml
 
@@ -20,115 +21,62 @@ class Singleton(type):
 class Report(metaclass=Singleton):
 
     TEMPLATE = """
-
-    <table style="width:600px;border: 1px solid #656565;margin-left: auto;margin-right: auto;">
-            <thead>   
-            <tr style="background-color: lightgray;">
-                <th colspan=5>Quadro resumo</th>
+            <table style="width:600px;border: 1px solid #656565;">
+            <tr style="background-color: lightgray;text-align:center">
+                <td colspan=5 style="text-align:center">Quadro resumo</td>
             </tr>
              <tr style="background-color: lightgray;">
-                <th colspan=1>Status</th>
-                <th colspan=1>Agenda</th>
-                <th colspan=1>Contatos</th>
-                <th colspan=1>Total Contas</th>
+                <td colspan=2 style="text-align:center">Agendas</td>
+                <td colspan=2 style="text-align:center">Contatos</td>
+                <td colspan=1 rowspan=1 style="text-align:center">Total Contas</td>
             </tr>     
-             <tr style="background-color: #dbead5;">
-                <th colspan=1>Sucesso</th>
-                <th colspan=1>{agendas_sucesso}</th>
-                <th colspan=1>{contatos_sucesso}</th>
-                <th colspan=1>{contas_sucesso}</th>
-            </tr>    
-            <tr style="background-color: #f2b4b3;">
-                <th colspan=1>Erro</th>
-                <th colspan=1>{agendas_erro}</th>
-                <th colspan=1>{contatos_erro}</th>
-                <th colspan=1>{contas_erro}</th>
-            </tr>       
-          <tr style="background-color: ">    
-                <th colspan=1>Total</th>
-                <th colspan=1>{agendas}</th>
-                <th colspan=1>{contatos}</th>
-                <th colspan=1>{contas}</th>
-            </tr>                       
-            </table>
-            <br/><br/>
-                <table style="width:600px;border: 1px solid #656565;margin-left: auto;margin-right: auto;">
-                <thead>   
-                <tr style="background-color: lightgray;">
-                <th colspan=5>Detalhes de migração {start}  - {end}</th>
-                </tr>
-             <tr style="background-color: lightgray;">
-               <th>Conta</th>
-               <th>Calendários</th>
-               <th>Contatos</th>
-               <th>Duração</th>
-               <th>Status</th>
-            </tr>            
-            </thead>
-                <tbody>
-                   {tbody}
-                </tbody>
+              <tr style="background-color: lightgray;">
+                <td wid th="100px" colspan=1 style="background-color: #dbead5;text-align:center">Sucesso</td>
+                <td width="100px" colspan=1 style="background-color: #f2b4b3;text-align:center">Erro</td>
+                <td width="100px" colspan=1 style="background-color: #dbead5;text-align:center">Sucesso</td>
+                <td width="100px" colspan=1 style="background-color: #f2b4b3;text-align:center">Erro</td>
+                 <td colspan=1 rowspan=2 style="background-color: lightgray;text-align:center">{contas}</td>
+            </tr>   
+             <tr>
+                <td colspan=1 style="background-color: #dbead5;text-align:center">{agendas_ok}</td>
+                 <td colspan=1 style="background-color: #f2b4b3;text-align:center">{agendas_nok}</td>
+                <td colspan=1 style="background-color: #dbead5;text-align:center">{contatos_ok}</td>
+                <td colspan=1 style="background-color: #f2b4b3;text-align:center">{contatos_nok}</td>
+            </tr>                    
             </table>
             """
     def send(self):
         database = Database()
+        report_resume = database.get_report()
+
         accs = database.get_process()
-        lines=''
-        lines_csv = 'DATE,ACCOUNT,CALENDARS,EVENTS,CONTACTS,DURATION,STATUS\n'
-        contas_sucesso = 0
-        contas_erro = 0
-        agendas_sucesso = 0
-        agendas_erro = 0
-        contatos_sucesso = 0
-        contatos_erro = 0
+        if len(accs)==0:
+            sys.exit()
 
+        lines_csv = 'DATE,ACCOUNT,SUCCESS CALENDARS,ERROR CALENDARS,SUCCESS EVENTS,ERROR EVENTS,SUCCESS CONTACTS,ERROR CONTACTS,DURATION\n'
+
+        for acc in accs:
+            line = '{},{},{},{},{},{},{},{},{},'.format( acc['date'],acc['account'], acc['calendars_ok'],acc['calendars_nok'],acc['events_ok'],acc['events_nok'],acc['contacts_ok'], acc['contacts_nok'], acc['duration'])
+            lines_csv += line+'\n'
         start = accs[0]['date']
-        for acc in accs:
-            if acc['status'] == 'C':
-                contas_sucesso +=1
-                agendas_sucesso +=acc['calendars']
-                contatos_sucesso += acc['contacts']
-            if acc['status'] == 'E':
-                contas_erro += 1
-                agendas_erro += acc['calendars']
-                contatos_erro += acc['contacts']
-
-        contas = contas_sucesso + contas_erro
-        contatos = contatos_sucesso + contatos_erro
-        agendas = agendas_sucesso + agendas_erro
-
-        count = 0
-        for acc in accs:
-            if acc['status'] == 'C':
-                status = 'Sucesso'
-                cor = '#dbead5;'
-            if acc['status'] == 'E':
-                status = 'Falha'
-                cor = '#f2b4b3;'
-            count +=1
-            end = acc['date']
-            if count<=100:
-                lines +="<tr style='background-color:{}'><td>{}</td><td>{}</td><td>{}</td><td>{} secs</td><td>{}</td></tr>\n".format(
-                cor,acc['account'],acc['calendars'],acc['contacts'],acc['duration'],status)
-                if count==100:
-                    lines += "<tr style='background-color:{}'><td colspan=5>Detalhes exibindo apenas 100 registros -- relatório completo em anexo</td></td></tr>\n"
-            lines_csv +="{},{},{},{},{},{},{}\n".format(end,acc['account'],acc['calendars'],acc['events'],acc['contacts'],acc['duration'],status)
-
+        end = accs[len(accs)-1]['date']
         body = self.TEMPLATE.format(
             start=start,
             end=end,
-            contas_sucesso=contas_sucesso,
-            contas_erro = contas_erro,
-            agendas_sucesso = agendas_sucesso,
-            agendas_erro = agendas_erro,
-            contatos_sucesso =contatos_sucesso,
-            contatos_erro = contatos_erro,
-            contas = contas,
-            contatos = contatos,
-            agendas = agendas,
-            tbody=lines)
+            contas=report_resume['account'],
+            contatos=report_resume['contacts'],
+            agendas=report_resume['calendars'],
+            contas_ok=report_resume['account_ok'],
+            eventos_ok=report_resume['events_ok'],
+            contas_nok = report_resume['account_nok'],
+            agendas_ok = report_resume['calendars_ok'],
+            agendas_nok = report_resume['calendars_nok'],
+            eventos_nok=report_resume['events_nok'],
+            contatos_ok =report_resume['contacts_ok'],
+            contatos_nok = report_resume['contacts_nok']
+          )
 
         google = GoogleAdmin()
-        subject = 'Relatório migração de agendas e contatos'.format(start=start,end=end)
+        subject = 'Relatório migração de agendas e contatos {start}'.format(start=start,end=end)
         google.send_message(to=settings.SEND_REPORT_TO, subject=subject, message_text=body,csv=lines_csv)
         logger.info('Report has been sent to '+settings.SEND_REPORT_TO)

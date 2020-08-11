@@ -344,7 +344,6 @@ class Google:
                 full_name = uq.get('nickname', uq['email'])
 
             return full_name
-        # noinspection PyUnresolvedReferences
         try:
             # Constructor new_contact
             google_contact = gdata.contacts.data.ContactEntry()
@@ -462,8 +461,8 @@ class Google:
         }
         try:
             created_calendar = self._service_calendar.calendars().insert(body=calendar).execute()
-            msg_success = 'Calendar successful created: ' + cal + ' with the ID ' + str(created_calendar['id'])
-            logger.debug(self.error_code['create_cal'] + msg_success)
+            msg_success = 'Calendar {0} successful created into {1}'.format(cal,self.account)
+            logger.debug( msg_success)
             return created_calendar['id']
 
         except gdata.client.RequestError as e:
@@ -486,7 +485,7 @@ class Google:
         """
         try:
             self._service_calendar.calendars().delete(calendarId=cal_id).execute()
-            logger.info(self.error_code['rem_cal'] + 'Calendar removed as requested. Calendar ID: ' + str(cal_id))
+            logger.info('Calendar removed as requested. Calendar ID: ' + str(cal_id))
             return True
 
         except Exception as stdErr:
@@ -514,22 +513,24 @@ class Google:
             logger.error(traceback.format_exc())
             return {}
 
-    def event_list(self):
-        event_list = []
-        page_token = None
+    def get_events(self, calendarId):
         try:
-            while True:
-                events = self._service_calendar.events().list(calendarId=calendar_id, pageToken=page_token).execute()
-                for event in events['items']:
-                    event_list.append(event)
-                page_token = events.get('nextPageToken')
-                if not page_token:
-                    break
-            return event_list
-        except Exception as stdErr:
-            logger.error(self.error_code['list_events'] + 'Unexpected Error: ' + str(stdErr))
+            events_result = self._service_calendar.events().list(calendarId=calendarId).execute()
+            events = events_result.get('items', [])
+            if events:
+                return events
+            else:
+                return None
+        except Exception:
             logger.error(traceback.format_exc())
-            return []
+            return None
+
+    def delete_event(self, calendarId, eventId):
+        try:
+            self._service_calendar.events().delete(calendarId=calendarId, eventId=eventId).execute()
+        except Exception:
+            logger.error(traceback.format_exc())
+            return None
 
     def delete_cal(self, calendarId):
         """
@@ -537,6 +538,10 @@ class Google:
           :return: Boolean, True if successful
         """
         try:
+            evts = self.get_events(calendarId=calendarId)
+            for evt in evts:
+                self.delete_event(calendarId=calendarId, eventId=evt['id'])
+
             self._service_calendar.calendars().delete(calendarId=calendarId).execute()
             return True
         except errors.HttpError as err:
@@ -580,26 +585,6 @@ class Google:
             logger.error(self.error_code['create_evt'] + 'Unexpected Error: ' + str(stdErr))
             logger.error(traceback.format_exc())
             return False
-
-    def get_events(self, max_events=10, cal_id='primary'):
-        """
-        Function that return a list of events from a given Google Calendar.
-
-        :param max_events: limit the number of events to be listed
-        :param cal_id: Calendar Id, using as default the Primary Calendar
-        :return: List of Events
-        """
-        try:
-            events_result = self._service_calendar.events().list(calendarId=cal_id, maxResults=max_events).execute()
-            events = events_result.get('items', [])
-            if events:
-                return events
-            else:
-                return None
-        except Exception as stdErr:
-            logger.error(self.error_code['g_events'] + 'Unexpected Error: ' + str(stdErr))
-            logger.error(traceback.format_exc())
-            return None
 
     def get_contacts(self, start_index=1, max_results=10000):
         """
@@ -734,7 +719,6 @@ class Google:
         try:
             group = self.service_contacs.GetGroup(cgu)
             self.service_contacs.Delete(group)
-            logger.info(self.error_code['rem_grp'] + 'Group removed as requested. ' + str(cgu))
             return True
         except errors.HttpError as err:
             if err.resp.status == 404:
@@ -812,7 +796,8 @@ class Google:
         :param cal_id: Calendar to register all the events
         :returns Boolean, True if successful; List of events that fail to be created.
         """
-        failed_processing = []
+        failed_processing = 0
+        ok_processing = 0
 
         def batch_handler(request_id, response, exception):
             """
@@ -821,16 +806,18 @@ class Google:
             :param response:
             :param exception:
             """
+            nonlocal failed_processing
+            nonlocal ok_processing
             # if exception is not None:
             if exception:
                 # print 'Fail', request_id, response, exception
                 err_msg = self.error_code['bi_evts'] + 'Failed to process: ' + str(request_id)
                 err_msg += ', Reason: ' + str(exception) + ' ' + str(response)
                 logger.error(err_msg)
-                failed_processing.append((request_id, response, exception))
+                failed_processing +=1
+                #failed_processing.append((request_id, response, exception))
             else:
-                # print 'OK', request_id, response
-                # Do something with the response
+                ok_processing +=1
                 pass
         try:
             batch = self._service_calendar.new_batch_http_request(callback=batch_handler)
@@ -838,10 +825,10 @@ class Google:
                 batch.add(self._service_calendar.events().insert(calendarId=cal_id, body=evt))
             batch.execute()
             sleep(0.300)
-            return True, failed_processing
+            return True, ok_processing, failed_processing
         except:
             logger.exception("batch_insert_events")
-            return False, failed_processing
+            return False, ok_processing, failed_processing
 
     def batch_insert_contacts(self, cl):
         """

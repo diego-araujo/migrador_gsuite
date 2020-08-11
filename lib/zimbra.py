@@ -20,6 +20,7 @@ import yaml
 from icalendar import Calendar
 from icalendar.parser import Contentlines
 from pytz import timezone
+import settings
 
 __author__ = 'diego@bedu.tech'
 
@@ -135,10 +136,11 @@ class Zimbra:
 
                     elif item['defaultView'] == "contact" and item['itemCount'] > 0:
                         result, contacts = self.__get_contacts(account,item['pathURLEncoded'])
-                        resource_item = {'status': result,
-                                         'resource': item,
-                                         'contacts': contacts}
-                        resources['contact'].append(resource_item)
+                        if result:
+                            resource_item = {'status': result,
+                                             'resource': item,
+                                             'contacts': contacts}
+                            resources['contact'].append(resource_item)
             end_time = round(time.time() - start_time, 2)
             logger.debug("Loaded all data from account[{0}] tooks {1} secs".format(account, end_time))
             return True, resources
@@ -172,8 +174,12 @@ class Zimbra:
                     """"""
             return evt_attendees
         try:
-            #output = self.exec_command(['ge', '"' + calendar_path + '"', account])
-            status, output = self.extract_resource(account,calendar_path ,'ics')
+            if settings.MODE_GET_RESOURCES == 'wget':
+                status, output = self.extract_resource(account,calendar_path ,'ics')
+            else:
+                output = self.exec_command(['ge', '"' + calendar_path + '"', account])
+                status = True if output[0:5] == 'BEGIN' else False
+
             if status:
                 evt_attendees = extract_attendees(output)
                 return True, Calendar.from_ical(output), evt_attendees
@@ -268,8 +274,11 @@ class Zimbra:
         addrbook = addrbook.replace("\\","")
         lista = []
         try:
-            #output = self.exec_command(['gc', '"' + addrbook + '"', account])
-            status, output = self.extract_resource(account,  addrbook , 'csv')
+            if settings.MODE_GET_RESOURCES == 'wget':
+                status, output = self.extract_resource(account,  addrbook , 'csv')
+            else:
+                output = self.exec_command(['gc', '"' + addrbook + '"', account])
+                status = True if  'email' in output else False
             if status:
                 contacts_dict = pandas.read_csv(StringIO(output), header=0, index_col=False, skipinitialspace = True, na_filter=False,quotechar = '"' ).T.to_dict()
                 for idx in contacts_dict:

@@ -34,9 +34,15 @@ class Database:
                     CREATE TABLE account (
                             account VARCHAR (100) NOT NULL PRIMARY KEY,
                             uuid VARCHAR (36) NOT NULL,
-                            calendars INTEGER NOT NULL,
-                            contacts INTEGER NOT NULL,
-                            events INTEGER NULL,
+                            calendars INTEGER DEFAULT 0,
+                            contacts INTEGER DEFAULT 0,
+                            events INTEGER DEFAULT 0,
+                            calendars_ok INTEGER DEFAULT 0,
+                            contacts_ok INTEGER DEFAULT 0,
+                            events_ok INTEGER DEFAULT 0,
+                            calendars_nok INTEGER DEFAULT 0,
+                            contacts_nok INTEGER DEFAULT 0,
+                            events_nok INTEGER DEFAULT 0,
                             status CHAR(1) NOT NULL,
                             duration VARCHAR(5) NULL,
                             date datetime NOT NULL
@@ -54,7 +60,7 @@ class Database:
                                   );""")
 
         self._conn = sqlite3.connect('gsuite_migration.db')
-        self._conn.row_factory = sqlite3.Row
+        self._conn.row_factory = dict_factory
         initial_load()
 
     def del_resource(self,resource_google_id,account=None):
@@ -121,7 +127,7 @@ class Database:
     def insert_resource(self, account, resource_path_zimbra,resource_google_id, resource_type, status):
         controle = Controle()
         sql = 'INSERT INTO resources (uuid,account, resource_path_zimbra, resource_google_id, resource_type, status, date) '
-        sql += "VALUES (?, ?, ?, ?, ?, datetime())"
+        sql += "VALUES (?,?, ?, ?, ?, ?, datetime())"
         values = [controle.get_uuid(),account, resource_path_zimbra,resource_google_id, resource_type, status]
         try:
             cursor = self._conn.cursor()
@@ -137,14 +143,34 @@ class Database:
         finally:
             cursor.close()
 
-    def insert_account(self, account, cals, conts, status):
+    def insert_account(self, account, res, res_ok, res_nok, status='C'):
         controle = Controle()
-        sql = 'INSERT INTO account (uuid,account, calendars, contacts, status, date) '
-        sql += "VALUES (?,?, ?, ?, ?, datetime())"
-        values = [controle.get_uuid(),account, cals, conts, status]
+        values = [account,controle.get_uuid()]
+        sql_ins = 'INSERT INTO account (account,uuid,calendars, contacts, events,'
+        sql_ins += 'calendars_ok, contacts_ok, events_ok,'
+        sql_ins += 'calendars_nok, contacts_nok, events_nok,'
+        sql_ins += 'status, date) '
+        sql_ins += 'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,datetime())'
+        for x in [0, 1, 2]:
+            if not res[x] is None:
+                values.append(res[x])
+            else:
+                values.append(0)
+        for x in [0, 1, 2]:
+            if not res_ok[x] is None:
+                values.append(res_ok[x])
+            else:
+                values.append(0)
+        for x in [0, 1, 2]:
+            if not res_nok[x]is None:
+                values.append(res_nok[x])
+            else:
+                values.append(0)
+
+        values.append(status)
         try:
             cursor = self._conn.cursor()
-            cursor.execute(sql,values)
+            cursor.execute(sql_ins, values)
             self._conn.commit()
             return cursor.lastrowid
         except Exception as stdErr:
@@ -154,6 +180,7 @@ class Database:
             return False
         finally:
             cursor.close()
+
 
     def update_account_status(self, account, status,duration):
         sql = "UPDATE account SET status=?, date=datetime(), duration=? "
@@ -171,20 +198,30 @@ class Database:
         finally:
             cursor.close()
 
-    def update_account(self, account, cals, conts, status, total_events=None):
+    def update_account(self, account, res, res_ok, res_nok,status='C'):
         controle = Controle()
-        values = [controle.get_uuid(), cals, conts, status]
-        sql = "UPDATE account SET uuid=?, calendars=?, contacts=?, status=?, date=datetime() "
-        if total_events:
-            sql += ",events=? "
-            values.append(total_events)
+        primary_fields = ['calendars','contacts','events']
 
-        sql += "WHERE account = ?"
+        values = [controle.get_uuid()]
+        _sql = 'UPDATE account SET uuid=?, '
+        for x in [0,1,2]:
+            if not res[x] is None:
+                values.append(res[x])
+                _sql += primary_fields[x] + '=?,'
+            if not res_ok[x] is None:
+                values.append(res_ok[x])
+                _sql += primary_fields[x] + '_ok=?,'
+            if not res_nok[x] is None:
+                values.append(res_nok[x])
+                _sql += primary_fields[x] + '_nok=?,'
+
+        _sql +='date = datetime(), status = ?'
+        values.append(status)
+        _sql += " WHERE account = ?"
         values.append(account)
-
         try:
             cursor = self._conn.cursor()
-            cursor.execute(sql,values)
+            cursor.execute(_sql,values)
             self._conn.commit()
         except Exception as stdErr:
             err_delegate = 'Unexpected error found: ' + str(stdErr)
@@ -194,12 +231,43 @@ class Database:
         finally:
             cursor.close()
 
-    def get_process(self):
+
+    def get_report(self):
         controle = Controle()
-        query = "SELECT * FROM account where uuid='{0}' order by date asc".format(controle.get_uuid())
+        query= """select 1 as account,
+                    case when (SUM(calendars_nok)+SUM(contacts_nok)+SUM(events_nok))==0 then 1 else 0 end as account_ok,
+                    case when (SUM(calendars_nok)+SUM(contacts_nok)+SUM(events_nok))==0 then 0 else 1 end as account_nok,
+                    SUM(calendars) as calendars,
+                    SUM(contacts) as contacts,
+                    SUM(events) as events,
+                    SUM(calendars_ok) as calendars_ok,
+                    SUM(contacts_ok) as contacts_ok,
+                    SUM(events_ok) as events_ok,
+                    SUM(calendars_nok) as calendars_nok,
+                    SUM(contacts_nok) as contacts_nok,
+                    SUM(events_nok) as events_nok,
+                    SUM(duration) as duration
+                    from account 
+            where uuid = ?"""
+
         try:
             cursor = self._conn.cursor()
-            cursor.execute(query)
+            cursor.execute(query, (controle.get_uuid(),))
+            return cursor.fetchone()
+        except Exception as stdErr:
+            err_delegate = 'Unexpected error found: ' + str(stdErr)
+            logger.error('[SELECT] ' + err_delegate)
+            logger.error(traceback.format_exc())
+            return False
+        finally:
+            cursor.close()
+
+    def get_process(self):
+        controle = Controle()
+        query = "SELECT * FROM account where uuid=? order by date asc"
+        try:
+            cursor = self._conn.cursor()
+            cursor.execute(query,(controle.get_uuid(),))
             return cursor.fetchall()
         except Exception as stdErr:
             err_delegate = 'Unexpected error found: ' + str(stdErr)
@@ -210,10 +278,10 @@ class Database:
             cursor.close()
 
     def get_account(self,account):
-        query = "SELECT * FROM account where account='{0}'".format(account)
+        query = "SELECT * FROM account where account=?"
         try:
             cursor = self._conn.cursor()
-            cursor.execute(query)
+            cursor.execute(query, (account,))
             return cursor.fetchone()
         except Exception as stdErr:
             err_delegate = 'Unexpected error found: ' + str(stdErr)
