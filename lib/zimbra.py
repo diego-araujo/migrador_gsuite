@@ -120,9 +120,9 @@ class Zimbra:
             'contact': []
         }
         try:
-            status_acc = self.exec_command(['ms', account])
+            status_acc = self.exec_command(['gs', account])
             if not 'active' in status_acc:
-                logger.error("Migration canceled -  account {0} is not active".format(account))
+                logger.error("Migration canceled -  account {0} is not active {1}".format(account,status_acc))
                 return False, None
 
             output = self.exec_command(['gaf', account])
