@@ -80,7 +80,7 @@ def process_calendar(google, database, data):
             database.insert_resource(account=google.account, resource_google_id=cal_id,
                                      resource_path_zimbra=resource['pathURLEncoded'], resource_type='A', status='I')
 
-            if len(evts)==0:
+            if evts is None or len(evts)==0:
                 continue
             for evt in evts:
                 events_ok +=1
