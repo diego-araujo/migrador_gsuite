@@ -213,11 +213,9 @@ def process_account(account):
     status_cont=False
     start_time = time.time()
     try:
-
         database = Database()
         zimbra = Zimbra()
         google = Google(account)
-
         status, data = zimbra.load_data_from_account(account=account)
         if status:
             total_contact = len(data['contact'])

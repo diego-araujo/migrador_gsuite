@@ -121,6 +121,10 @@ class Zimbra:
         }
         try:
             output = self.exec_command(['gaf', account])
+            if not 'subFolders' in output:
+                logger.error("Error decode json returned by server [{}]".format(output.replace('\\n','')))
+                return False, None
+
             _json = json.loads(output)
             if "subFolders" in _json and len(_json['subFolders']) > 0:
                 for item in _json['subFolders']:
