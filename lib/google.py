@@ -541,6 +541,7 @@ class Google:
             evts = self.get_events(calendarId=calendarId)
             for evt in evts:
                 self.delete_event(calendarId=calendarId, eventId=evt['id'])
+                sleep(0.300)
 
             self._service_calendar.calendars().delete(calendarId=calendarId).execute()
             return True
@@ -652,7 +653,7 @@ class Google:
         except gdata.client.RequestError as e:
             # if e.status == 412:
             if e.status == 520:
-                time.sleep(30)
+                sleep(30)
             err_gdata = 'Status: ' + str(e.status)
             logger.error(self.error_code['create_ct'] + err_gdata)
             logger.error(str(e))
@@ -896,7 +897,7 @@ class Google:
         except gdata.client.RequestError as e:
             # if e.status == 412:
             if e.status == 520:
-                time.sleep(30)
+                sleep(30)
             err_gdata = 'Status: ' + str(e.status)
             logger.error(self.error_code['br_cts'] + err_gdata)
             logger.error(str(e))
