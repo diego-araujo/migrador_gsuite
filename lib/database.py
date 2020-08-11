@@ -234,7 +234,7 @@ class Database:
 
     def get_report(self):
         controle = Controle()
-        query= """select 1 as account,
+        query= """select count(*) as account,
                     case when (SUM(calendars_nok)+SUM(contacts_nok)+SUM(events_nok))==0 then 1 else 0 end as account_ok,
                     case when (SUM(calendars_nok)+SUM(contacts_nok)+SUM(events_nok))==0 then 0 else 1 end as account_nok,
                     SUM(calendars) as calendars,
