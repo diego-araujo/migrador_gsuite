@@ -98,6 +98,7 @@ def process_calendar(google, database, data):
                 # print 'Processing batch', doing, len(group)
                 doing += 1
                 result, group_events_ok, group_events_nok = google.batch_insert_events(group, cal_id)
+
                 events_ok = events_ok + group_events_ok
                 events_nok = events_nok + group_events_nok
 
