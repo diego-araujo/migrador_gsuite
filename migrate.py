@@ -165,7 +165,9 @@ def process_contacts(zimbra, google, database, data):
                 for contact in zimbra_contacts:
                     contacts_ok +=1
                     if contact['google_fields']['dlist'] != '':
-                        google.convert_dlist(contact)
+                        continue
+
+                        #google.convert_dlist(contact)
                     else:
                         contact, is_ok = google.format_contact(contact, group.id.text)
                         if is_ok:
@@ -215,9 +217,9 @@ def process_account(account):
     try:
         database = Database()
         zimbra = Zimbra()
-        google = Google(account)
         status, data = zimbra.load_data_from_account(account=account)
         if status:
+            google = Google(account)
             total_contact = len(data['contact'])
             total_calendar = len(data['calendar'])
             logger.debug("Start process migrate calendar for {0}".format(account))
