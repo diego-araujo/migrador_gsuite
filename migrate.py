@@ -209,7 +209,6 @@ def process_account(account):
             database.update_account(
                 account=account,
                 res=res, res_ok=res_ok, res_nok=res_nok, status=status)
-        logger.debug("Start process migrate calendar for {0}".format(account))
     status_cal=False
     status_cont=False
     start_time = time.time()
