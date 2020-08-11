@@ -87,7 +87,7 @@ class Zimbra:
         command = [bash, account, folder, format]
         response = check_output(command)
         try:
-            response = str(response.rstrip())
+            response = str(response.rstrip(), "utf-8")
             if format=='ics' and not response[0:5] == 'BEGIN':
                 logger.error("Error decode Calendar returned by server [{}]".format(response))
                 return False, response
@@ -110,7 +110,7 @@ class Zimbra:
         _stdin, stdout, _stderr = self.ssh.exec_command(str(cmd), get_pty=True)
         stdout._set_mode('r')
         # return the resulting output for command execution
-        return str(stdout.read().rstrip(), "utf-8")
+        return str(stdout.read().rstrip(), "utf-8",'replace')
 
     def load_data_from_account(self, account):
         start_time = time.time()
