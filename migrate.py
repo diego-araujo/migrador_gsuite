@@ -35,6 +35,8 @@ def reset_previously_migrated_calendars(google, database):
     if len(previously_migrated_calendars)>0:
         logger.info("Deleting {0} previously migrated calendars from account {1}".format(len(previously_migrated_calendars),previously_migrated_calendars[0]['account']))
     for cal in previously_migrated_calendars:
+        if cal['resource_google_id'] is None:
+            continue
         resp = google.delete_cal(calendarId=cal['resource_google_id'])
         if resp:
             database.del_resource(resource_google_id=cal['resource_google_id'])
