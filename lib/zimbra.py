@@ -120,6 +120,11 @@ class Zimbra:
             'contact': []
         }
         try:
+            status_acc = self.exec_command(['ms', account])
+            if not 'active' in status_acc:
+                logger.error("Error account {0} is not sctive {}".format(account))
+                return False, None
+
             output = self.exec_command(['gaf', account])
             if not 'subFolders' in output:
                 logger.error("Error decode json returned by server [{}]".format(output.replace('\\n','')))
