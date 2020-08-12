@@ -222,7 +222,7 @@ class Zimbra:
             if not result or not ical:
                 return False, None, None
             for event in ical.walk('VEVENT'):
-                if not 'ORGANIZER' in event or account in event['ORGANIZER']:
+                if not 'ORGANIZER' in event or not account in event['ORGANIZER']:
                     continue
                 event_to_add = {}
                 for element in self.fields_zimbra_compatible_google_event:
