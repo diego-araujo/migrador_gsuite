@@ -218,7 +218,10 @@ def process_account(account):
     try:
         database = Database()
         zimbra = Zimbra()
+
         status, data = zimbra.load_data_from_account(account=account)
+        #status, data = zimbra.load_data_from_account(account='diego@zimbra-testes.us-central1-a.c.bedu-tech-lab.internal')
+
         if status:
             google = Google(account)
             total_contact = len(data['contact'])

@@ -232,6 +232,8 @@ class Google:
                 new_event['attendees'] = []
                 responseStatus = 'declined'
                 for attendee in evt_attendees:
+                    if attendee['email'] == self.account: #remove owner
+                        continue
                     if attendee['PARTSTAT'] == u'NEEDS-ACTION':
                         responseStatus =  'needsAction'
                     elif attendee['PARTSTAT'] == u'ACCEPTED':
@@ -255,11 +257,12 @@ class Google:
                 new_event['end'] = {'dateTime': evt['DTEND'],
                                     'timeZone': timezone,
                                     }
+            new_event['visibility'] = 'default'
             if evt['CLASS']:
                 if evt['CLASS'] == 'PUBLIC':
                     new_event['visibility'] = 'public'
                 else:
-                    new_event['visibility'] = 'private'
+                    new_event['visibility'] = 'default'
             if evt['TRANSP']:
                 if evt['TRANSP'] == 'TRANSPARENT':
                     new_event['transparency'] = 'transparent'

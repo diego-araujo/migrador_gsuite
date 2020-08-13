@@ -50,7 +50,8 @@ class ExecuteZimbraCMD:
                 print (line.rstrip('\n').split(': ')[1])
 
     def get_status(self):
-        response = Popen(self.sshcmd('ga')+'zimbraAccountStatus', stdout=PIPE)
+        command = ['sudo', '-u', 'zimbra', '/opt/zimbra/bin/zmprov', 'ga', self.account]
+        response = Popen(command, stdout=PIPE)
         for line in response.stdout.readlines():
             if 'zimbraAccountStatus' in line:
                 print (line.rstrip('\n').split(': ')[1])
