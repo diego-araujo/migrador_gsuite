@@ -232,7 +232,7 @@ class Google:
                 new_event['attendees'] = []
                 responseStatus = 'declined'
                 for attendee in evt_attendees:
-                    if attendee['email'] == self.account: #remove owner
+                    if self.account in attendee['email']: #remove owner
                         continue
                     if attendee['PARTSTAT'] == u'NEEDS-ACTION':
                         responseStatus =  'needsAction'
