@@ -92,7 +92,7 @@ class Zimbra:
             if format=='ics' and not response[0:5] == 'BEGIN':
                 logger.error("Error decode Calendar returned by server [{}]".format(response[:50]))
                 return False, response
-            if format == 'csv' and not 'email' in response[0:200]:
+            if format == 'csv' and not 'email' in response[0:2000]:
                 if response == '':
                     return True, '"company","email","fileAs","firstName","lastName"'
                 logger.error("Error decode Contacts returned by server [{}]".format(response[:50]))
