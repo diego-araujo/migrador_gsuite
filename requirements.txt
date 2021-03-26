@@ -1,5 +1,5 @@
 google-api-python-client==1.8.3
-PyYAML==5.3.1
+PyYAML==5.4
 pandas==0.24.2
 unicodecsv==0.14.1
 icalendar==4.0.6
