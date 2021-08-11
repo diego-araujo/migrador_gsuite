@@ -26,11 +26,12 @@ __author__ = 'diego@bedu.tech'
 
 from exception import ProcessException
 
-logging.config.dictConfig(yaml.load(open('credentials/logging.ini', 'r'),Loader=yaml.FullLoader))
+logging.config.dictConfig(yaml.load(open('credentials/logging.ini', 'r'), Loader=yaml.FullLoader))
 # Define a log namespace for this lib. The name must be defined in the logging.ini to work.
 logger = logging.getLogger('CLIENT')
 # Credentials location to connect and execute commands on Zimbra side
 LOCATION = 'credentials/zimbra.json'
+
 
 class Zimbra:
 
@@ -40,37 +41,53 @@ class Zimbra:
             with open(LOCATION) as data_file:
                 self._data = json.load(data_file)
 
+            if self._data.get('tunnel_enabled') == 1:
+                ssh_tunnel = paramiko.SSHClient()
+                ssh_tunnel.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                ssh_tunnel.connect(self._data['tunnel_ssh_server'],
+                                   username=self._data['ssh_user'],
+                                   password=self._data['ssh_pwd'])
+                vmtransport = ssh_tunnel.get_transport()
+                dest_addr = (self._data['ssh_server'], 22)  # edited#
+                local_addr = (self._data['tunnel_ssh_server'], 22)  # edited#
+                vmchannel = vmtransport.open_channel("direct-tcpip", dest_addr, local_addr)
+
             self.ssh = paramiko.SSHClient()
             self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-            if ('ssh_privatekey' in self._data):
-                self.ssh.connect(self._data['ssh_server'], username=self._data['ssh_user'],
-                                 key_filename=self._data['ssh_privatekey'])
+            if self._data.get('tunnel_enabled') == 1:
+                self.ssh.connect(self._data['ssh_server'],
+                                 username=self._data['ssh_user'],
+                                 password=self._data['ssh_pwd'],
+                                 sock=vmchannel)
             else:
-                #self.ssh.connect(self._data['ssh_server'], username=self._data['ssh_user'], password=self._data['ssh_pwd'])
-                self.ssh.connect(self._data['ssh_server'], username=self._data['ssh_user'])
-
+                self.ssh.connect(self._data['ssh_server'],
+                                 username=self._data['ssh_user'],
+                                 password=self._data['ssh_pwd'])
 
             # CALENDAR SETTINGS
             # Define all default elements compatible with Google Calendar
-            self.fields_zimbra_compatible_google_event = ['LOCATION', 'SUMMARY', 'ORGANIZER', 'DTSTART', 'DTEND', 'ATTENDEE', 'CLASS', 'STATUS',
-                                  'X-MICROSOFT-CDO-ALLDAYEVENT', 'X-ALT-DESC', 'SEQUENCE', 'TRANSP', 'RRULE', 'VALARM',
-                                  'X-MICROSOFT-CDO-INTENDEDSTATUS','PARTSTAT','UID','DESCRIPTION','ORGANIZER']
-
+            self.fields_zimbra_compatible_google_event = ['LOCATION', 'SUMMARY', 'ORGANIZER', 'DTSTART', 'DTEND',
+                                                          'ATTENDEE', 'CLASS', 'STATUS',
+                                                          'X-MICROSOFT-CDO-ALLDAYEVENT', 'X-ALT-DESC', 'SEQUENCE',
+                                                          'TRANSP', 'RRULE', 'VALARM',
+                                                          'X-MICROSOFT-CDO-INTENDEDSTATUS', 'PARTSTAT', 'UID',
+                                                          'DESCRIPTION', 'ORGANIZER']
 
             # ADDRESSBOOK SETTINGS
             # Define all default fields compatible with Google Contacts
-            self.fields_google_contact = ['firstName', 'middleName', 'lastName', 'fullName', 'notes', 'jobTitle', 'company',
-                           'namePrefix', 'nickname', 'type', 'dlist', 'email', 'fileAs', 'dlist', 'type',
-                           'department', 'birthday', 'homePhone', 'workPhone', 'mobilePhone',
-                           'homeStreet', 'homeCity', 'homeCountry', 'homePostalCode', 'homeState',
-                           'workStreet', 'workCity', 'workCountry', 'workPostalCode', 'workState']
+            self.fields_google_contact = ['firstName', 'middleName', 'lastName', 'fullName', 'notes', 'jobTitle',
+                                          'company',
+                                          'namePrefix', 'nickname', 'type', 'dlist', 'email', 'fileAs', 'dlist', 'type',
+                                          'department', 'birthday', 'homePhone', 'workPhone', 'mobilePhone',
+                                          'homeStreet', 'homeCity', 'homeCountry', 'homePostalCode', 'homeState',
+                                          'workStreet', 'workCity', 'workCountry', 'workPostalCode', 'workState']
 
             # Store all not empty calendars for this account
             self.calendars = {}
-        except (paramiko.SSHException, paramiko.AuthenticationException,paramiko.BadHostKeyException , socket.error) as se:
+        except (
+        paramiko.SSHException, paramiko.AuthenticationException, paramiko.BadHostKeyException, socket.error) as se:
             raise ProcessException("Error to connect zimbra server", se)
-
 
     def get_galsync(self):
         if 'galsync' in self._data:
@@ -83,13 +100,13 @@ class Zimbra:
         return None
 
     def extract_resource(self, account, folder, format):
-        bash = os.path.dirname(os.path.abspath(__file__))+'/zmmailbox.sh'
+        bash = os.path.dirname(os.path.abspath(__file__)) + '/zmmailbox.sh'
         command = [bash, account, folder, format]
         response = check_output(command)
         try:
             response = str(response.rstrip(), "utf-8", 'ignore')
 
-            if format=='ics' and not response[0:5] == 'BEGIN':
+            if format == 'ics' and not response[0:5] == 'BEGIN':
                 logger.error("Error decode Calendar returned by server [{}]".format(response[:50]))
                 return False, response
             if format == 'csv' and not 'email' in response[0:2000] and not 'group' in response[0:2000]:
@@ -102,18 +119,20 @@ class Zimbra:
             return False, None
         return True, response
 
-    def exec_command(self, attrs):
+    def exec_command(self, command):
         # Remote command to be executed
-        cmd = '/usr/bin/python ' + self._data['colector_file'] + ' '  # type: Union[Union[str, unicode], Any]
-
+        # cmd = '/usr/bin/python ' + self._data['colector_file'] + ' '  # type: Union[Union[str, unicode], Any]
+        cmd_line = 'echo "{pwd}" | sudo -Sku zimbra {command}'.format(command=command, pwd=self._data['zimbra_sudo_pwd'])
         # Building the command with all arguments in attrs list
-        cmd += ' '.join(str(x) for x in attrs)
+        # cmd += ' '.join(str(x) for x in attrs)
 
         # Execute remote command and get all outputs
-        _stdin, stdout, _stderr = self.ssh.exec_command(str(cmd), get_pty=True)
+        _stdin, stdout, _stderr = self.ssh.exec_command(cmd_line, get_pty=True)
         stdout._set_mode('r')
         # return the resulting output for command execution
-        return str(stdout.read().rstrip(), "utf-8",'replace')
+        output = str(stdout.read().rstrip(), "utf-8", 'replace')
+        output = output.replace('[sudo] password for {user}:'.format(user=self._data['ssh_user']),'')
+        return output.replace('\r','').strip()
 
     def load_data_from_account(self, account):
         start_time = time.time()
@@ -127,14 +146,15 @@ class Zimbra:
             'contact': []
         }
         try:
-            status_acc = self.exec_command(['gs', account])
+            status_acc = self.get_status(account)
             if not 'active' in status_acc:
-                logger.error("Migration canceled -  account {0} status is {1}".format(account,status_acc))
+                logger.error("Migration canceled -  account {0} status is {1}".format(account, status_acc))
                 return False, None
 
-            output = self.exec_command(['gaf', account])
+            command = '/opt/zimbra/bin/zmmailbox -z -m {account} gaf -v'.format(account=account)
+            output = self.exec_command(command)
             if not 'subFolders' in output:
-                logger.error("Error decode json returned by server [{}]".format(output.replace('\\n','')))
+                logger.error("Error decode json returned by server [{}]".format(output.replace('\\n', '')))
                 return False, None
 
             _json = json.loads(output)
@@ -144,14 +164,16 @@ class Zimbra:
                         if "ownerId" in item:
                             continue
                         else:
-                            result, ical, evt_attendees = self.get_events(account=account,calendar_path=item['pathURLEncoded'], tz=resources['timezone'])
+                            result, ical, evt_attendees = self.get_events(account=account,
+                                                                          calendar_path=item['pathURLEncoded'],
+                                                                          tz=resources['timezone'])
                             resource_item = {'status': result,
                                              'resource': item,
                                              'events': {'ical': ical, 'event_attendees': evt_attendees}}
                             resources['calendar'].append(resource_item)
 
                     elif item['defaultView'] == "contact" and item['itemCount'] > 0:
-                        result, contacts = self.__get_contacts(account,item['pathURLEncoded'])
+                        result, contacts = self.__get_contacts(account, item['pathURLEncoded'])
                         if result:
                             resource_item = {'status': result,
                                              'resource': item,
@@ -164,12 +186,11 @@ class Zimbra:
             logger.error("Error decode json returned by server [{}]".format(output))
             return False, None
 
-
     def __get_raw_events(self, account, calendar_path):
         def decode_utf(output_):
             decode_line = ''
             for line in output_:
-                    decode_line += line.decode('utf-8')
+                decode_line += line.decode('utf-8')
             return decode_line
 
         def extract_attendees(output):
@@ -189,11 +210,14 @@ class Zimbra:
                 except:
                     """"""
             return evt_attendees
+
         try:
             if settings.MODE_GET_RESOURCES == 'wget':
-                status, output = self.extract_resource(account,calendar_path ,'ics')
+                status, output = self.extract_resource(account, calendar_path, 'ics')
             else:
-                output = self.exec_command(['ge', '"' + calendar_path + '"', account])
+                command = '/opt/zimbra/bin/zmmailbox -z -m {account} getRestURL //"{path}"?fmt=ics'.format(
+                    account=account, path=calendar_path)
+                output = self.exec_command(command)
                 status = True if output[0:5] == 'BEGIN' else False
 
             if status:
@@ -222,8 +246,13 @@ class Zimbra:
             if not result or not ical:
                 return False, None, None
             for event in ical.walk('VEVENT'):
+                domain = account.split('@')[1]
+
+                #Somente serão processados eventos caso o organizador seja a própria conta
+                #ou uma conta de domínio externo
                 if not 'ORGANIZER' in event or not account in event['ORGANIZER']:
-                    continue
+                    if "@{domain}".format(domain=domain) in event['ORGANIZER']:
+                        continue
                 event_to_add = {}
                 for element in self.fields_zimbra_compatible_google_event:
                     if event.get(element):
@@ -287,18 +316,23 @@ class Zimbra:
 
             return {'google_fields': google_fields, 'custom_fields': custom_fields}
 
-        addrbook = addrbook.replace("\\","")
+        addrbook = addrbook.replace("\\", "")
         lista = []
         try:
             if settings.MODE_GET_RESOURCES == 'wget':
-                status, output = self.extract_resource(account,  addrbook , 'csv')
+                status, output = self.extract_resource(account, addrbook, 'csv')
             else:
-                output = self.exec_command(['gc', '"' + addrbook + '"', account])
-                status = True if  'email' in output else False
+                command = '/opt/zimbra/bin/zmmailbox -z -m {account} getRestURL //"{path}"?fmt=csv'.format(
+                    account=account,
+                    path=addrbook
+                )
+                output = self.exec_command(command)
+                status = True if 'email' in output else False
             if status:
-                contacts_dict = pandas.read_csv(StringIO(output), header=0, index_col=False, skipinitialspace = True, na_filter=False,quotechar = '"' ).T.to_dict()
+                contacts_dict = pandas.read_csv(StringIO(output), header=0, index_col=False, skipinitialspace=True,
+                                                na_filter=False, quotechar='"').T.to_dict()
                 for idx in contacts_dict:
-                    contact= contacts_dict[idx]
+                    contact = contacts_dict[idx]
                     lista.append(full_list(contact))
             else:
                 return False, None
@@ -308,16 +342,19 @@ class Zimbra:
         return True, lista
 
     def get_timezone(self, account):
-        return self.exec_command(['timezone', account])
+        command = '/opt/zimbra/bin/zmprov ga {account} zimbraPrefTimeZoneId'.format(account=account)
+        stdout = self.exec_command(command)
+        for line in stdout.splitlines():
+            if 'zimbraPrefTimeZoneId' in line:
+                return line.rstrip('\n').split(': ')[1].strip()
 
-    def get_status(self):
-        output = self.exec_command(['gs', self.acc])
-        return output.read().rstrip('\n')
+        return 'America/Sao_Paulo'
 
-    def set_status(self, status):
-        output = self.exec_command(['ms', status, self.acc])
-        return output.read().rstrip('\n')
+    def get_status(self, account):
+        command = '/opt/zimbra/bin/zmprov ga {account} zimbraAccountStatus'.format(account=account)
+        stdout = self.exec_command(command)
+        for line in stdout.splitlines():
+            if 'zimbraAccountStatus' in line:
+                return line.rstrip('\n').split(': ')[1].strip()
 
-    def set_password(self, passwd):
-        output = self.exec_command(['sp', passwd, self.acc])
-        return output.read().rstrip('\n')
+        return 'status-not-found'

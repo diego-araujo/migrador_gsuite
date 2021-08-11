@@ -1,5 +1,7 @@
-ADMIN_ACCOUNT='diego@demo.bedu.tech'
-SEND_REPORT_TO='diegolpsaraujo@gmail.com'
+ADMIN_ACCOUNT='bedu@lna.br'
+SEND_REPORT_TO='diego@bedu.tech'
 
 # ssh or wget
 MODE_GET_RESOURCES = 'ssh'
+
+

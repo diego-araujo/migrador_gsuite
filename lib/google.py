@@ -44,15 +44,7 @@ class GoogleAdmin:
         self.json = 'credentials/google.json'
         self.scopes = ['https://www.googleapis.com/auth/calendar',
                        'https://www.googleapis.com/auth/contacts',
-                       'https://www.google.com/m8/feeds/',
-                       'https://www.googleapis.com/auth/admin.directory.user',
-                       'https://www.googleapis.com/auth/admin.directory.orgunit.readonly',
-                       'https://www.googleapis.com/auth/admin.directory.orgunit',
-                       'https://www.googleapis.com/auth/apps.groups.migration',
-                       'https://www.googleapis.com/auth/gmail.insert',
-                       'https://www.googleapis.com/auth/gmail.labels',
-                       'https://mail.google.com/',
-                       'https://www.googleapis.com/auth/gmail.modify']
+                       'https://www.googleapis.com/auth/gmail.send']
 
         self._service_gmail = None
         self.credentials = ServiceAccountCredentials.from_json_keyfile_name(self.json, scopes=self.scopes)
@@ -140,16 +132,16 @@ class Google:
 
         # Load all the Application Scope used to handle Calendar and Contacts
         self.scopes = ['https://www.googleapis.com/auth/calendar',
-                       'https://www.googleapis.com/auth/contacts',
-                       'https://www.google.com/m8/feeds/',
-                       'https://www.googleapis.com/auth/admin.directory.user',
-                       'https://www.googleapis.com/auth/admin.directory.orgunit.readonly',
-                       'https://www.googleapis.com/auth/admin.directory.orgunit',
-                       'https://www.googleapis.com/auth/apps.groups.migration',
-                       'https://www.googleapis.com/auth/gmail.insert',
-                       'https://www.googleapis.com/auth/gmail.labels',
-                       'https://mail.google.com/',
-                       'https://www.googleapis.com/auth/gmail.modify']
+                       'https://www.googleapis.com/auth/contacts']
+        """'https://www.google.com/m8/feeds/',
+        'https://www.googleapis.com/auth/admin.directory.user',
+        'https://www.googleapis.com/auth/admin.directory.orgunit.readonly',
+        'https://www.googleapis.com/auth/admin.directory.orgunit',
+        'https://www.googleapis.com/auth/apps.groups.migration',
+        'https://www.googleapis.com/auth/gmail.insert',
+        'https://www.googleapis.com/auth/gmail.labels',
+        'https://mail.google.com/',
+        'https://www.googleapis.com/auth/gmail.modify']"""
 
         # Stores the User Account
         self.account = str(account)

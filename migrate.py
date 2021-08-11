@@ -32,8 +32,11 @@ RUNNING = 'running.lock'
 def reset_previously_migrated_calendars(google, database):
     previously_migrated_calendars = database.get_resources(account=google.account, type='A', status='C')
     previously_migrated_calendars += database.get_resources(account=google.account, type='A', status='I')
-    if len(previously_migrated_calendars)>0:
-        logger.info("Deleting {0} previously migrated calendars from account {1}".format(len(previously_migrated_calendars),previously_migrated_calendars[0]['account']))
+    if len(previously_migrated_calendars) > 0:
+        logger.info(
+            "Deleting {0} previously migrated calendars from account {1}".format(len(previously_migrated_calendars),
+                                                                                 previously_migrated_calendars[0][
+                                                                                     'account']))
     for cal in previously_migrated_calendars:
         if cal['resource_google_id'] is None:
             continue
@@ -41,15 +44,20 @@ def reset_previously_migrated_calendars(google, database):
         if resp:
             database.del_resource(resource_google_id=cal['resource_google_id'])
 
+
 def reset_previously_migrated_contacts(google, database):
     previously_migrated_contact = database.get_resources(account=google.account, type='C', status='C')
     if len(previously_migrated_contact) > 0:
-        logger.info("Deleting {0} previously migrated group contacts from account {1}".format(len(previously_migrated_contact),previously_migrated_contact[0]['account']))
+        logger.info(
+            "Deleting {0} previously migrated group contacts from account {1}".format(len(previously_migrated_contact),
+                                                                                      previously_migrated_contact[0][
+                                                                                          'account']))
 
     for cts in previously_migrated_contact:
         resp = google.remove_group(cts['resource_google_id'])
         if resp:
             database.del_resource(account=google.account, resource_google_id=cts['resource_google_id'])
+
 
 def process_calendar(google, database, data):
     try:
@@ -74,17 +82,17 @@ def process_calendar(google, database, data):
                 resource['name'] = resource['name'] + ' Zimbra'
             cal_id = google.create_calendar(resource['name'], timezone)
             if cal_id is None:
-                calendars_nok +=1
+                calendars_nok += 1
                 continue
-            calendars_ok +=1
+            calendars_ok += 1
             database.insert_resource(account=google.account, resource_google_id=cal_id,
                                      resource_path_zimbra=resource['pathURLEncoded'], resource_type='A', status='I')
 
-            if evts is None or len(evts)==0:
+            if evts is None or len(evts) == 0:
                 continue
             for evt in evts:
-                events_ok +=1
-                event_attendees = res['events']['event_attendees'].get(str(evt['UID']),[])
+                events_ok += 1
+                event_attendees = res['events']['event_attendees'].get(str(evt['UID']), [])
                 evento = google.format_event_zimbra_to_google(evt, event_attendees, timezone)
                 if evento:
                     batch_process.append(evento)
@@ -104,16 +112,20 @@ def process_calendar(google, database, data):
 
             database.update_resource_status(account=google.account, resource_google_id=cal_id, status='C')
 
-            if events_nok>0:
-                logger.error('[CALENDAR] Failed to migrate {0} events in calendar {1} account {2}'.format(events_nok, resource['name'], google.account))
+            if events_nok > 0:
+                logger.error('[CALENDAR] Failed to migrate {0} events in calendar {1} account {2}'.format(events_nok,
+                                                                                                          resource[
+                                                                                                              'name'],
+                                                                                                          google.account))
                 calendars_ok = calendars_ok - 1
         return True, calendars_ok, calendars_nok, events_ok, events_nok
     except:
         logger.exception('Error processing calendar to account {0}'.format(google.account))
         return False, calendars_ok, calendars_nok, events_ok, events_nok
 
+
 def process_contacts(zimbra, google, database, data):
-    def validate_all_contacts(account,data):
+    def validate_all_contacts(account, data):
         try:
             for items in data['contact']:
                 if not items['status']:
@@ -121,7 +133,8 @@ def process_contacts(zimbra, google, database, data):
                 for contact in items['contacts']:
                     _, is_ok = google.format_contact(contact, "dummy-value")
                     if not is_ok:
-                        logger.error('Error in validation contact list for {0} entry[{1}]'.format(account,json.dumps(contact)))
+                        logger.error(
+                            'Error in validation contact list for {0} entry[{1}]'.format(account, json.dumps(contact)))
             return True
         except Exception as e:
             logger.error('Error in validation contact list for {0} exception[{1}]'.format(account, str(e)))
@@ -139,7 +152,7 @@ def process_contacts(zimbra, google, database, data):
                 batch_process = []
 
                 group_name = urllib.parse.unquote(item['resource']['pathURLEncoded'])
-                if group_name[0:1]=='/':
+                if group_name[0:1] == '/':
                     group_name = group_name[1:]
 
                 if item['resource']['name'] == data['zimbra_config']['galsync']:
@@ -153,7 +166,7 @@ def process_contacts(zimbra, google, database, data):
                 group = google.create_contact_group(group_name)
 
                 if group is None:
-                    logger.error("Unexpected error on create group {} to {}".format(group_name,google.account))
+                    logger.error("Unexpected error on create group {} to {}".format(group_name, google.account))
                     continue
                 # save group contact id into database
                 database.insert_resource(
@@ -164,11 +177,11 @@ def process_contacts(zimbra, google, database, data):
                     status='I')
                 zimbra_contacts = item['contacts']
                 for contact in zimbra_contacts:
-                    contacts_ok +=1
+                    contacts_ok += 1
                     if contact['google_fields']['dlist'] != '':
                         continue
 
-                        #google.convert_dlist(contact)
+                        # google.convert_dlist(contact)
                     else:
                         contact, is_ok = google.format_contact(contact, group.id.text)
                         if is_ok:
@@ -195,32 +208,34 @@ def process_contacts(zimbra, google, database, data):
                                 logger.error('[MCC_CONTACTS] ' + err_batch)
 
                 database.update_resource_status(account=google.account, resource_google_id=group.id.text,
-                                                    status='C')
+                                                status='C')
         return True, contacts_ok, contacts_nok
     except:
         logger.exception('process_contacts')
         return False, contacts_ok, contacts_nok
 
-def process_account(account):
 
-    def update_status(account, res, res_ok, res_nok,status):
+def process_account(account):
+    def update_status(account, res, res_ok, res_nok, status):
         previously_migrated_account = database.get_account(account=account)
         if not previously_migrated_account:
             database.insert_account(account=account,
-                res=res, res_ok=res_ok, res_nok=res_nok, status=status)
+                                    res=res, res_ok=res_ok, res_nok=res_nok, status=status)
         else:
             database.update_account(
                 account=account,
                 res=res, res_ok=res_ok, res_nok=res_nok, status=status)
-    status_cal=False
-    status_cont=False
+
+    status_cal = False
+    status_cont = False
     start_time = time.time()
     try:
         database = Database()
         zimbra = Zimbra()
 
-        status, data = zimbra.load_data_from_account(account=account)
-        #status, data = zimbra.load_data_from_account(account='diego@zimbra-testes.us-central1-a.c.bedu-tech-lab.internal')
+        # status, data = zimbra.load_data_from_account(account=account)
+        status, data = zimbra.load_data_from_account(
+            account=account)
 
         if status:
             google = Google(account)
@@ -230,7 +245,7 @@ def process_account(account):
             status_cal, calendars_ok, calendars_nok, events_ok, events_nok = process_calendar(google, database, data)
             if status_cal:
                 status = 'C'
-                if calendars_nok==0 and events_nok==0:
+                if calendars_nok == 0 and events_nok == 0:
                     logger.debug("Calendar were successfully migrated for {0}".format(account))
                 else:
                     logger.debug("Calendar partially successfully migrated for {0}".format(account))
@@ -238,27 +253,27 @@ def process_account(account):
                 status = 'E'
                 logger.error("Failed to migrate Calendar for {0}".format(account))
 
-            update_status(account, [total_calendar, total_contact, events_ok+events_nok],
+            update_status(account, [total_calendar, total_contact, events_ok + events_nok],
                           [calendars_ok, None, events_ok], [calendars_nok, None, events_nok], status)
 
             logger.info("Start process migrate Contacts for {0}".format(account))
-            status_cont, contacts_ok, contacts_nok = process_contacts(zimbra, google,database,  data)
+            status_cont, contacts_ok, contacts_nok = process_contacts(zimbra, google, database, data)
             if status_cont:
                 logger.debug("Contacts were successfully migrated for {0}".format(account))
             else:
                 logger.error("Failed to migrate Contacts for {0}".format(account))
 
             update_status(account=account,
-                          res=[None,contacts_ok+contacts_nok, None],
+                          res=[None, contacts_ok + contacts_nok, None],
                           res_ok=[None, contacts_ok, None],
                           res_nok=[None, contacts_nok, None],
                           status='C')
             return status_cal, status_cont
         else:
             update_status(account=account,
-                          res=[0,0,0],
-                          res_ok=[0,0,0],
-                          res_nok=[0,0,0],
+                          res=[0, 0, 0],
+                          res_ok=[0, 0, 0],
+                          res_nok=[0, 0, 0],
                           status='E')
     except Exception as err:
         logger.error(err, exc_info=logging.getLogger().getEffectiveLevel() == logging.DEBUG)
@@ -269,7 +284,8 @@ def process_account(account):
         if status_cal and status_cont:
             status = 'E'
             logger.info("Process completed for {0}".format(account))
-        database.update_account_status(account=account, status=status,duration=end_time)
+        database.update_account_status(account=account, status=status, duration=end_time)
+
 
 def task(account):
     logger.info("Start process for {0}".format(threading.currentThread().getName()))
@@ -305,10 +321,10 @@ if __name__ == "__main__":
         if df.size > 0:
             line = 0
             for index, row in df.iterrows():
-                line +=1
+                line += 1
                 if not re.match(r"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)", row[0]):
-                    sys.exit("Line #{} contains invalid format: {}".format(line,row[0]))
-                if line==1 and settings.MODE_GET_RESOURCES=='wget':
+                    sys.exit("Line #{} contains invalid format: {}".format(line, row[0]))
+                if line == 1 and settings.MODE_GET_RESOURCES == 'wget':
                     logger.info("Test retrieve resources from remote Zimbra Server")
                     status1, _ = z.extract_resource(row[0], '/Calendar', 'ics')
                     status2, _ = z.extract_resource(row[0], '/Contacts', 'csv')
@@ -329,7 +345,7 @@ if __name__ == "__main__":
         for thread in threads:
             thread.join(timeout=500)
             if thread.is_alive():
-                #thread.terminate()
+                # thread.terminate()
                 logger.info("Timeout process for {0}".format(account))
 
         report = Report()

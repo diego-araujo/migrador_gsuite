@@ -50,7 +50,6 @@ class Migration():
         tmp = Popen(command, stdout=PIPE)
         for line in tmp.stdout.readlines():
             if 'zimbraPrefTimeZoneId' in line:
-                print
                 line.rstrip('\n').split(': ')[1]
 
     def get_status(self):
