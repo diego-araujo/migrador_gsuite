@@ -2,7 +2,7 @@ google-api-python-client==1.8.3
 PyYAML==5.3.1
 pandas==0.24.2
 unicodecsv==0.14.1
-icalendar==4.0.6
+icalendar==4.0.7
 #gdata==2.0.18
 gdata-python3==3.0.1
 oauth2client==4.1.3

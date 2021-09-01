@@ -71,7 +71,7 @@ def process_calendar(google, database, data):
         events_nok = 0
         for res in data['calendar']:
             resource = res['resource']
-            evts = res['events']['ical']
+            evts = res['events']
             batch_process = []
             if resource['name'] == 'Calendar':
                 resource['name'] = 'Agenda Zimbra'
@@ -92,8 +92,7 @@ def process_calendar(google, database, data):
                 continue
             for evt in evts:
                 events_ok += 1
-                event_attendees = res['events']['event_attendees'].get(str(evt['UID']), [])
-                evento = google.format_event_zimbra_to_google(evt, event_attendees, timezone)
+                evento = google.format_event_zimbra_to_google(evt, timezone)
                 if evento:
                     batch_process.append(evento)
             request_per_group = 50
@@ -214,7 +213,63 @@ def process_contacts(zimbra, google, database, data):
         logger.exception('process_contacts')
         return False, contacts_ok, contacts_nok
 
+def process_lna_correcao(account):
+    try:
 
+        smphr.acquire()
+        print(account)
+        zimbra = Zimbra()
+        eventos_externosz = zimbra.obter_todos_externos(account)
+        eventos_externos_g = []
+        eventos_externosz_recriar = {}
+
+        google = Google(account)
+        eventos_externos = [str(x['SUMMARY']) for x in eventos_externosz]
+        database = Database()
+        resources = database.get_resources(account=account,type='A', status='C')
+        for cal in resources:
+            evts = google.get_events(calendarId=cal['resource_google_id'])
+            for evt in evts:
+                summary = evt.get('summary')
+                if summary in eventos_externos:
+                    date = evt.get('start').get('dateTime') if 'dateTime' in evt.get('start') else evt.get('start').get('date')
+                    tz = evt.get('start').get('timeZone','"America/Sao_Paulo')
+                    for ze in eventos_externosz:
+                        if summary == str(ze['SUMMARY']) and date[0:16] == ze['DTSTART'][0:16]:
+                            eventos_externos_g.append('{a},{id},{uid},{s}'.format(a=account,id=evt['id'],uid=ze['UID'],s=evt['summary']))
+                            print(summary,str(ze['SUMMARY']))
+                            zid = ze['UID'].to_ical().decode('utf-8')
+                            if not eventos_externosz_recriar.get(zid):
+                                eventos_externosz_recriar[zid] = {}
+                                eventos_externosz_recriar[zid]['ze']=ze
+                                eventos_externosz_recriar[zid]['ge'] = []
+                                eventos_externosz_recriar[zid]['calendarId'] = cal['resource_google_id']
+                            eventos_externosz_recriar[zid]['ge'].append(evt)
+                            print(evt['summary'],ze['SUMMARY'])
+
+        for uid in eventos_externosz_recriar:
+            ge = google.format_event_zimbra_to_google(eventos_externosz_recriar[uid]['ze'],tz)
+            ge_ = eventos_externosz_recriar[uid]['ge']
+            calendarId = eventos_externosz_recriar[uid]['calendarId']
+            ok = False
+            for gevt in ge_:
+                if gevt and ge['summary'] == gevt['summary']:
+                    ok = True
+                    google.delete_event(calendarId, gevt['id'])
+                    print('Evento removido '+gevt['summary'])
+                else:
+                    print('Erro ' + gevt['summary'])
+            if ok:
+                google.import_event(ge,calendarId)
+                print('Evento reimportado ' + ge['summary'])
+            from time import sleep
+            sleep(0.5)
+
+    except Exception as err:
+        logger.error(err, exc_info=logging.getLogger().getEffectiveLevel() == logging.DEBUG)
+        logger.error("Process failed for {0}".format(account))
+    finally:
+        smphr.release()
 def process_account(account):
     def update_status(account, res, res_ok, res_nok, status):
         previously_migrated_account = database.get_account(account=account)
@@ -296,6 +351,7 @@ def task(account):
 
 
 if __name__ == "__main__":
+
     if os.path.exists(RUNNING):
         sys.exit("Operation aborted: PROCESS ALREADY RUNNING. Delete 'running.lock' file")
     if not len(sys.argv[1:]) == 1:
@@ -307,17 +363,15 @@ if __name__ == "__main__":
         logger.info("Trying to connect SSH remote Zimbra Server")
         z = Zimbra()
 
-
     except Exception as e:
         logger.error(e)
         os._exit(1)
     arq = open(RUNNING, 'w+')
     arq.close()
-    smphr = threading.Semaphore(value=5)
+    smphr = threading.Semaphore(value=1)
     threads = list()
     try:
         df = pd.read_csv(file, header=None, index_col=False)
-
         if df.size > 0:
             line = 0
             for index, row in df.iterrows():
@@ -334,6 +388,8 @@ if __name__ == "__main__":
                         sys.exit("Aborted")
 
                 account = str(row[0])
+
+                #th = threading.Thread(name=account, target=process_lna_correcao, args=(account,))
                 th = threading.Thread(name=account, target=task, args=(account,))
                 th.daemon = True
                 threads.append(th)
@@ -343,7 +399,7 @@ if __name__ == "__main__":
         for thread in threads:
             thread.start()
         for thread in threads:
-            thread.join(timeout=500)
+            thread.join(timeout=50000)
             if thread.is_alive():
                 # thread.terminate()
                 logger.info("Timeout process for {0}".format(account))

@@ -18,6 +18,7 @@ import unicodecsv as csv
 import re
 import yaml
 from icalendar import Calendar
+from icalendar.cal import Component, types_factory, component_factory
 from icalendar.parser import Contentlines
 from pytz import timezone
 import settings
@@ -86,7 +87,8 @@ class Zimbra:
             # Store all not empty calendars for this account
             self.calendars = {}
         except (
-        paramiko.SSHException, paramiko.AuthenticationException, paramiko.BadHostKeyException, socket.error) as se:
+                paramiko.SSHException, paramiko.AuthenticationException, paramiko.BadHostKeyException,
+                socket.error) as se:
             raise ProcessException("Error to connect zimbra server", se)
 
     def get_galsync(self):
@@ -122,7 +124,8 @@ class Zimbra:
     def exec_command(self, command):
         # Remote command to be executed
         # cmd = '/usr/bin/python ' + self._data['colector_file'] + ' '  # type: Union[Union[str, unicode], Any]
-        cmd_line = 'echo "{pwd}" | sudo -Sku zimbra {command}'.format(command=command, pwd=self._data['zimbra_sudo_pwd'])
+        cmd_line = 'echo "{pwd}" | sudo -Sku zimbra {command}'.format(command=command,
+                                                                      pwd=self._data['zimbra_sudo_pwd'])
         # Building the command with all arguments in attrs list
         # cmd += ' '.join(str(x) for x in attrs)
 
@@ -131,8 +134,24 @@ class Zimbra:
         stdout._set_mode('r')
         # return the resulting output for command execution
         output = str(stdout.read().rstrip(), "utf-8", 'replace')
-        output = output.replace('[sudo] password for {user}:'.format(user=self._data['ssh_user']),'')
-        return output.replace('\r','').strip()
+        output = output.replace('[sudo] password for {user}:'.format(user=self._data['ssh_user']), '')
+        return output.replace('\r', '').strip()
+
+    def obter_todos_externos(self,account):
+        result, list_events = self.get_events(account=account,
+                                       calendar_path='/Calendar',
+                                       tz="America/Sao_Paulo")
+        summarys = []
+        for event in list_events:
+            if event.get('EXTERNAL_EVENT',False):
+                total_interno = 0
+                if isinstance(event['ATTENDEE'], (list, tuple)) and len(event['ATTENDEE'])>=2 :
+                    for attendee in event['ATTENDEE']:
+                        if re.search('(?<=mailto:).+', attendee).group(0).split('@')[1] == 'lna.br':
+                            total_interno +=1
+                    summarys.append(event)
+
+        return summarys
 
     def load_data_from_account(self, account):
         start_time = time.time()
@@ -164,12 +183,12 @@ class Zimbra:
                         if "ownerId" in item:
                             continue
                         else:
-                            result, ical, evt_attendees = self.get_events(account=account,
-                                                                          calendar_path=item['pathURLEncoded'],
-                                                                          tz=resources['timezone'])
+                            result, ical = self.get_events(account=account,
+                                                           calendar_path=item['pathURLEncoded'],
+                                                           tz=resources['timezone'])
                             resource_item = {'status': result,
                                              'resource': item,
-                                             'events': {'ical': ical, 'event_attendees': evt_attendees}}
+                                             'events': ical}
                             resources['calendar'].append(resource_item)
 
                     elif item['defaultView'] == "contact" and item['itemCount'] > 0:
@@ -193,24 +212,6 @@ class Zimbra:
                 decode_line += line.decode('utf-8')
             return decode_line
 
-        def extract_attendees(output):
-            evt_attendees = {}
-            for line in Contentlines.from_ical(output):  # raw parsing
-                try:
-                    name, params, vals = line.parts()
-                    if name == 'UID':
-                        uid = vals
-                    if name == 'ATTENDEE':
-                        if uid not in evt_attendees:
-                            evt_attendees[str(uid)] = []
-                        vals = vals.replace('mailto:', '')
-                        if re.match(r"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)", vals):
-                            evt_attendees[str(uid)].append(
-                                {'email': vals, 'CN': params['CN'], 'PARTSTAT': params['PARTSTAT']})
-                except:
-                    """"""
-            return evt_attendees
-
         try:
             if settings.MODE_GET_RESOURCES == 'wget':
                 status, output = self.extract_resource(account, calendar_path, 'ics')
@@ -218,13 +219,102 @@ class Zimbra:
                 command = '/opt/zimbra/bin/zmmailbox -z -m {account} getRestURL //"{path}"?fmt=ics'.format(
                     account=account, path=calendar_path)
                 output = self.exec_command(command)
+                _output = """BEGIN:VCALENDAR
+X-WR-CALNAME:Calendar
+X-WR-CALID:4f67cfc4-66db-4e2a-bb38-c52c7a319752:10
+PRODID:Zimbra-Calendar-Provider
+VERSION:2.0
+METHOD:PUBLISH
+BEGIN:VTIMEZONE
+TZID:America/Sao_Paulo
+BEGIN:STANDARD
+DTSTART:16010101T000000
+TZOFFSETTO:-0300
+TZOFFSETFROM:-0300
+TZNAME:-03/-02
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VTIMEZONE
+TZID:America/New_York
+BEGIN:STANDARD
+DTSTART:16010101T020000
+TZOFFSETTO:-0500
+TZOFFSETFROM:-0400
+RRULE:FREQ=YEARLY;WKST=MO;INTERVAL=1;BYMONTH=11;BYDAY=1SU
+TZNAME:EST
+END:STANDARD
+BEGIN:DAYLIGHT
+DTSTART:16010101T020000
+TZOFFSETTO:-0400
+TZOFFSETFROM:-0500
+RRULE:FREQ=YEARLY;WKST=MO;INTERVAL=1;BYMONTH=3;BYDAY=2SU
+TZNAME:EDT
+END:DAYLIGHT
+END:VTIMEZONE
+BEGIN:VTIMEZONE
+TZID:America/Santiago
+BEGIN:STANDARD
+DTSTART:16010101T000000
+TZOFFSETTO:-0400
+TZOFFSETFROM:-0300
+RRULE:FREQ=YEARLY;WKST=MO;INTERVAL=1;BYMONTH=4;BYDAY=1SU
+TZNAME:-04/-03
+END:STANDARD
+BEGIN:DAYLIGHT
+DTSTART:16010101T000000
+TZOFFSETTO:-0300
+TZOFFSETFROM:-0400
+RRULE:FREQ=YEARLY;WKST=MO;INTERVAL=1;BYMONTH=9;BYDAY=2SU
+TZNAME:-04/-03
+END:DAYLIGHT
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:040000008200E00074C5B7101A82E0080000000000FDD10019A3D6010000000000000000
+ 1000000082DE61DEF15AFB43A8C69DF2360F33C2
+SUMMARY:Teste novo evento externo
+DESCRIPTION:\n
+Descrição evento externo
+\n\n
+LOCATION:Reuni<C3><A3>o do Microsoft Teams
+ATTENDEE;CN=Diego Lopes;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:diegolpsaraujo@gmail.com
+ATTENDEE;CN=Diego Araujo;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:diego@bedu.tech
+ATTENDEE;CN=Bedu Tech;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:bedu@bedu.tech
+ATTENDEE;CN=Bedu Tech Admin;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:admin@lna.br
+PRIORITY:5
+X-MICROSOFT-CDO-APPT-SEQUENCE:0
+X-MICROSOFT-CDO-OWNERAPPTID:1942988772
+X-MICROSOFT-CDO-BUSYSTATUS:TENTATIVE
+X-MICROSOFT-CDO-IMPORTANCE:1
+X-MICROSOFT-CDO-INSTTYPE:0
+X-MICROSOFT-LOCATIONS:[{"DisplayName":"Reuni<C3><A3>o do Microsoft Teams"\,"Locatio
+ nAnnotation":""\,"LocationUri":""\,"LocationStreet":""\,"LocationCity":""\,"
+ LocationState":""\,"LocationCountry":""\,"LocationPostalCode":""\,"LocationF
+ ullAddress":""}]
+ORGANIZER;CN=Diego Araujo Gmail:mailto:diegolpsaraujo@gmail.com
+DTSTART;TZID="America/Sao_Paulo":20210901T140000
+DTEND;TZID="America/Sao_Paulo":20210901T140000
+STATUS:CONFIRMED
+CLASS:PUBLIC
+X-MICROSOFT-CDO-INTENDEDSTATUS:BUSY
+TRANSP:OPAQUE
+LAST-MODIFIED:20201015T203459Z
+DTSTAMP:20201015T203459Z
+SEQUENCE:0
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER;RELATED=START:-PT5M
+DESCRIPTION:Reminder
+END:VALARM
+END:VEVENT
+END:VCALENDAR"""
+
+
                 status = True if output[0:5] == 'BEGIN' else False
 
             if status:
-                evt_attendees = extract_attendees(output)
-                return True, Calendar.from_ical(output), evt_attendees
+                return True, Calendar.from_ical(output)
             else:
-                return False, None, None
+                return False, None
         except Exception as err:
             logger.exception("__get_raw_events")
             return False, None, None
@@ -241,63 +331,58 @@ class Zimbra:
             list_events = []
             # Define the delimiters of each event (start and end point)
             time_events = ['DTSTART', 'DTEND']
-            result, ical, evt_attendees = self.__get_raw_events(account, calendar_path)
+            result, ical = self.__get_raw_events(account, calendar_path)
 
             if not result or not ical:
                 return False, None, None
+
             for event in ical.walk('VEVENT'):
+
                 domain = account.split('@')[1]
 
-                #Somente serão processados eventos caso o organizador seja a própria conta
-                #ou uma conta de domínio externo
-                if not 'ORGANIZER' in event or not account in event['ORGANIZER']:
-                    if "@{domain}".format(domain=domain) in event['ORGANIZER']:
-                        continue
+                # Somente serão processados eventos caso o organizador seja a própria conta
+                # ou uma conta de domínio externo
+                if not 'ORGANIZER' in event:
+                    continue
+
                 event_to_add = {}
+                organizer = re.search('(?<=mailto:).+', event['ORGANIZER']).group(0)
+                if not account == organizer.strip():
+                    if domain == organizer.split('@')[1]:
+                        continue
+                    else:
+                        event_to_add['EXTERNAL_EVENT'] = True
+
                 for element in self.fields_zimbra_compatible_google_event:
                     if event.get(element):
                         if element in time_events:
                             if not event.get(element).dt:
-                                event_to_add[element] = None
+                               continue
+                            if 'VALUE' in event.get(element).params \
+                                    and event.get(element).params['VALUE'] == 'DATE':
+                                event_to_add[element] = event.get(element).dt.strftime("%Y-%m-%d")
                             else:
+                                event_to_add[element] = self.format_gdatetime(event.get(element).dt, tz)
 
-                                time_tmp = event.get(element).dt
-                                str_time = str(time_tmp)
-                                if len(str_time) == 25:
-                                    date_raw = str(time_tmp).split(' ')
-                                    event_to_add[element] = date_raw[0] + 'T' + date_raw[1][:11] + '00'
-
-                                else:
-                                    div_date = str_time.split('-')
-                                    if div_date[0] == '0201':
-                                        year = '2010'
-                                    else:
-                                        year = div_date[0]
-                                    if " " in div_date[2]:
-                                        tmp_ = div_date[2].split(" ")
-                                        day = tmp_[0]
-                                        tempo = tmp_[1].split(":")
-                                        dt = tz.localize(datetime(int(year),
-                                                                  int(div_date[1]),
-                                                                  int(day), int(tempo[0]),
-                                                                  int(tempo[1]), int(tempo[2])))
-                                    else:
-                                        dt = tz.localize(datetime(int(year),
-                                                                  int(div_date[1]),
-                                                                  int(div_date[2]), 0, 0, 0))
-
-                                    # 2012-08-02T00:00:00-0300
-                                    event_to_add[element] = dt.strftime("%Y-%m-%dT%X%z")
                         else:
                             event_to_add[element] = event.get(element)
                     else:
                         event_to_add[element] = ''
 
                 list_events.append(event_to_add)
-            return True, list_events, evt_attendees
+            return True, list_events
         except Exception as err:
             logger.exception("get_events")
             return False, None, None
+
+    def format_gdatetime(self, date, tz):
+        try:
+            if re.match(r'^\d{4}-\d{2}-\d{2}$', str(date)):
+                return tz.localize(datetime(year=date.year, month=date.month, day=date.day)).strftime("%Y-%m-%dT%X%z")
+            else:
+                return date.strftime("%Y-%m-%dT%X%z")
+        except Exception as e:
+            return str(date)
 
     def __get_contacts(self, account, addrbook):
         def full_list(elements):

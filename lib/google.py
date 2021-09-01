@@ -12,10 +12,12 @@ import googleapiclient
 import yaml
 import gdata
 import atom
+import re
+import sys
 from bs4 import BeautifulSoup
 from googleapiclient import errors
 from gdata.contacts.client import ContactsClient
-from gdata import gauth, data
+from gdata import gauth, data, calendar
 from googleapiclient.discovery import build
 from httplib2 import Http
 from oauth2client.service_account import ServiceAccountCredentials
@@ -28,15 +30,19 @@ __author__ = 'diegoa@bedu.tech'
 yaml.warnings({'YAMLLoadWarning': False})
 logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
 logging.getLogger('googleapiclient.discovery').setLevel(logging.CRITICAL)
-logging.config.dictConfig(yaml.load(open('credentials/logging.ini', 'r'),Loader=yaml.FullLoader))
-
+logging.config.dictConfig(yaml.load(open('credentials/logging.ini', 'r'), Loader=yaml.FullLoader))
 
 # Define a log namespace for this lib. The name must be defined in the logging.ini to work.
 logger = logging.getLogger('CLIENT')
+
+
 class GoogleApiException(Exception):
 
     def __init__(self, message):
         super().__init__("Google API returned error: {}".format(str(message)))
+
+
+
 
 class GoogleAdmin:
 
@@ -53,11 +59,11 @@ class GoogleAdmin:
         if self._service_gmail is None:
             delegated = self.credentials.create_delegated(settings.ADMIN_ACCOUNT)
             self._service_gmail = build('gmail', 'v1', http=delegated.authorize(Http()),
-                                       cache_discovery=False)
+                                        cache_discovery=False)
         return self._service_gmail
 
-    def send_message(self,to, subject, message_text, csv=None):
-      """Send an email message.
+    def send_message(self, to, subject, message_text, csv=None):
+        """Send an email message.
 
       Args:
         service: Authorized Gmail API service instance.
@@ -68,26 +74,194 @@ class GoogleAdmin:
       Returns:
         Sent Message.
       """
-      try:
-        message = MIMEMultipart('mixed')
-        message['to'] = to
-        message['subject'] = subject
-        part1 = MIMEText(message_text, 'html')
-        message.attach(part1)
-        if csv:
-            partcsv = MIMEApplication(
-                io.StringIO(csv).read(), _subtype='csv'
-            )
-            partcsv['Content-Disposition'] = 'attachment; filename="report.csv"'
-            message.attach(partcsv)
+        try:
+            message = MIMEMultipart('mixed')
+            message['to'] = to
+            message['subject'] = subject
+            part1 = MIMEText(message_text, 'html')
+            message.attach(part1)
+            if csv:
+                partcsv = MIMEApplication(
+                    io.StringIO(csv).read(), _subtype='csv'
+                )
+                partcsv['Content-Disposition'] = 'attachment; filename="report.csv"'
+                message.attach(partcsv)
 
-        _message = {'raw': base64.urlsafe_b64encode(message.as_string().encode()).decode()}
-        self.__get_service_gmail().users().messages().send(userId="me", body=_message).execute()
+            _message = {'raw': base64.urlsafe_b64encode(message.as_string().encode()).decode()}
+            self.__get_service_gmail().users().messages().send(userId="me", body=_message).execute()
 
-        return True
-      except Exception as error:
-        raise GoogleApiException(error)
+            return True
+        except Exception as error:
+            raise GoogleApiException(error)
 
+"""class GoogleCalendarParser:
+    def encode_element(self, el):
+        return el.encode('ascii', 'replace')
+
+    def ical2gcal(self, evt):
+
+        e = calendar.CalendarEventEntry()
+        # Parse iCal event.
+        event = {}
+
+        if evt['SUMMARY']:
+            event['summary'] = evt['SUMMARY']
+        if evt['LOCATION']:
+            event['location'] = evt['LOCATION']
+        if evt['X-ALT-DESC']:
+            event['description'] = evt['X-ALT-DESC']
+        else:
+            event['description'] = ''
+
+        if 'LOCATION' in evt:
+            event['where'] = evt['LOCATION']
+
+        event['uid'] = evt['UID']
+        event['subject'] = self.encode_element(dt.summary.value)
+        if 'X-ALT-DESC' in evt:
+            event['description'] = self.encode_element(dt.description.value)
+            else:
+            event['description'] = ''
+        if hasattr(dt, 'location'):
+            event['where'] = self.encode_element(dt.location.value)
+        else:
+            event['where'] = ''
+        if hasattr(dt, 'status'):
+            event['status'] = self.encode_element(dt.status.value)
+        else:
+            event['status'] = 'CONFIRMED'
+        if hasattr(dt, 'organizer'):
+            event['organizer'] = self.encode_element(dt.organizer.params['CN'][0])
+            event['mailto'] = self.encode_element(dt.organizer.value)
+            event['mailto'] = re.search('(?<=MAILTO:).+', event['mailto']).group(0)
+        if hasattr(dt, 'rrule'):
+            event['rrule'] = self.encode_element(dt.rrule.value)
+        if hasattr(dt, 'dtstart'):
+            event['start'] = dt.dtstart.value
+        if hasattr(dt, 'dtend'):
+            event['end'] = dt.dtend.value
+        if hasattr(dt, 'valarm'):
+            event['alarm'] = self.format_alarm(self.encode_element(dt.valarm.trigger.value))
+
+        # Convert into a Google Calendar event.
+        try:
+            e.title = atom.Title(text=event['subject'])
+            e.extended_property.append(gdata.calendar.ExtendedProperty(name='local_uid', value=event['uid']))
+            e.content = atom.Content(text=event['description'])
+            e.where.append(gdata.calendar.Where(value_string=event['where']))
+            e.event_status = gdata.calendar.EventStatus()
+            e.event_status.value = event['status']
+            if event.has_key('organizer'):
+                attendee = gdata.calendar.Who()
+                attendee.rel = 'ORGANIZER'
+                attendee.name = event['organizer']
+                attendee.email = event['mailto']
+                attendee.attendee_status = gdata.calendar.AttendeeStatus()
+                attendee.attendee_status.value = 'ACCEPTED'
+                if len(e.who) > 0:
+                    e.who[0] = attendee
+                else:
+                    e.who.append(attendee)
+            # TODO: handle list of attendees.
+            if event.has_key('rrule'):
+                # Recurring event.
+                recurrence_data = ('DTSTART;VALUE=DATE:%s\r\n'
+                                   + 'DTEND;VALUE=DATE:%s\r\n'
+                                   + 'RRULE:%s\r\n') % ( \
+                                      self.format_datetime_recurring(event['start']), \
+                                      self.format_datetime_recurring(event['end']), \
+                                      event['rrule'])
+                e.recurrence = gdata.calendar.Recurrence(text=recurrence_data)
+            else:
+                # Single-occurrence event.
+                if len(e.when) > 0:
+                    e.when[0] = gdata.calendar.When(start_time=self.format_datetime(event['start']), \
+                                                    end_time=self.format_datetime(event['end']))
+                else:
+                    e.when.append(gdata.calendar.When(start_time=self.format_datetime(event['start']), \
+                                                      end_time=self.format_datetime(event['end'])))
+                if event.has_key('alarm'):
+                    # Set reminder.
+                    for a_when in e.when:
+                        if len(a_when.reminder) > 0:
+                            a_when.reminder[0].minutes = event['alarm']
+                        else:
+                            a_when.reminder.append(gdata.calendar.Reminder(minutes=event['alarm']))
+            return e
+        except Exception as e:
+            logger.exception("ical2gcal" + 'ERROR: couldn\'t create gdata event object: ', event['subject'])
+            return None
+
+        # Use the Google-compliant datetime format for single events.
+        def format_datetime(self, date):
+            try:
+                if re.match(r'^\d{4}-\d{2}-\d{2}$', str(date)):
+                    return str(date)
+                else:
+                    return str(time.strftime("%Y-%m-%dT%H:%M:%S.000Z", date.utctimetuple()))
+            except:
+                return str(date)
+
+        # Use the Google-compliant datetime format for recurring events.
+        def format_datetime_recurring(self, date):
+            try:
+                if re.match(r'^\d{4}-\d{2}-\d{2}$', str(date)):
+                    return str(date).replace('-', '')
+                else:
+                    return str(time.strftime("%Y%m%dT%H%M%SZ", date.utctimetuple()))
+            except:
+                return str(date)
+
+        # Use the Google-compliant alarm format.
+        def format_alarm(self, alarm):
+            google_minutes = [5, 10, 15, 20, 25, 30, 45, 60, 120, 180, 1440, 2880, 10080]
+            m = re.match('-(\d+)( day[s]?, )?(\d+):(\d{2}):(\d{2})', alarm)
+            try:
+                time = m.groups()
+                t = 60 * ((int(time[0]) - 1) * 24 + (23 - int(time[2]))) + (60 - int(time[3]))
+                # Find the closest minutes value valid for Google.
+                closest_min = google_minutes[0]
+                closest_diff = sys.maxint
+                for m in google_minutes:
+                    diff = abs(t - m)
+                    if diff == 0:
+                        return m
+                    if diff < closest_diff:
+                        closest_min = m
+                        closest_diff = diff
+                return closest_min
+            except:
+                return 0
+
+    def format_alarm(self, alarm):
+        google_minutes = [5, 10, 15, 20, 25, 30, 45, 60, 120, 180, 1440, 2880, 10080]
+        m = re.match('-(\d+)( day[s]?, )?(\d+):(\d{2}):(\d{2})', alarm)
+        try:
+            time = m.groups()
+            t = 60 * ((int(time[0]) - 1) * 24 + (23 - int(time[2]))) + (60 - int(time[3]))
+            # Find the closest minutes value valid for Google.
+            closest_min = google_minutes[0]
+            closest_diff = sys.maxint
+            for m in google_minutes:
+                diff = abs(t - m)
+                if diff == 0:
+                    return m
+                if diff < closest_diff:
+                    closest_min = m
+                    closest_diff = diff
+            return closest_min
+        except:
+            return 0
+        
+    def format_datetime_recurring(self, date):
+        try:
+            if re.match(r'^\d{4}-\d{2}-\d{2}$', str(date)):
+                return str(date).replace('-', '')
+            else:
+                return str(time.strftime("%Y%m%dT%H%M%SZ", date.utctimetuple()))
+        except:
+            return str(date)
+"""
 class Google:
     def __init__(self, account):
 
@@ -133,6 +307,7 @@ class Google:
         # Load all the Application Scope used to handle Calendar and Contacts
         self.scopes = ['https://www.googleapis.com/auth/calendar',
                        'https://www.googleapis.com/auth/contacts']
+
         """'https://www.google.com/m8/feeds/',
         'https://www.googleapis.com/auth/admin.directory.user',
         'https://www.googleapis.com/auth/admin.directory.orgunit.readonly',
@@ -190,7 +365,8 @@ class Google:
             if delegate():
                 try:
                     # Calendar Token
-                    self._service_calendar = build('calendar', 'v3', http=self.dc.authorize(Http()), cache_discovery=False)
+                    self._service_calendar = build('calendar', 'v3', http=self.dc.authorize(Http()),
+                                                   cache_discovery=False)
 
                     # Contacts Token
                     self.service_contacs = ContactsClient(source='contacts_handler')
@@ -198,19 +374,20 @@ class Google:
                     self.auth_token.authorize(self.service_contacs)
                     self.feed = ''
                 except:
-                    logger.exception('Problem when trying to access ' + self.account + ' account, check it in the logs later.')
+                    logger.exception(
+                        'Problem when trying to access ' + self.account + ' account, check it in the logs later.')
 
             else:
-                print ('Problem when trying to access ' + self.account + ' account, check it in the logs later.')
+                print('Problem when trying to access ' + self.account + ' account, check it in the logs later.')
                 self.is_ok = False
         else:
-            print ('Problem when trying to validate your credentials, check it in the logs later.')
+            print('Problem when trying to validate your credentials, check it in the logs later.')
             self.is_ok = False
 
     def is_connected(self):
         return self.is_ok
 
-    def format_event_zimbra_to_google(self, evt,evt_attendees, timezone):
+    def format_event_zimbra_to_google(self, evt, timezone):
         """
         Function to convert a Zimbra Calendar event into a Google Calendar event.
 
@@ -218,88 +395,84 @@ class Google:
         :param timezone: Zimbra Timezone obtained from the user account
         :return: Google Calendar event object
         """
+
         try:
-            new_event = {'anyoneCanAddSelf': False, }
+            new_event = {'iCalUID': evt['UID'].to_ical().decode('utf-8'),
+                         'anyoneCanAddSelf': False, 'status': 'CONFIRMED', 'sendUpdates':'none'}
+
+            new_event['external_event'] = evt.get('EXTERNAL_EVENT',False)
+
+            if new_event['external_event']:
+                email = re.search('(?<=mailto:).+', evt['ORGANIZER'].to_ical().decode('utf-8')).group(0)
+                new_event['organizer'] = {'email': email}
+                if 'CN' in evt['ORGANIZER'].params:
+                    new_event['organizer']['displayName'] = evt['ORGANIZER'].params['CN']
+
+            if 'STATUS' in evt:
+                new_event['status'] = evt['STATUS'].to_ical().decode('utf-8').lower()
+
             if 'ATTENDEE' in evt:
                 new_event['attendees'] = []
-                responseStatus = 'declined'
-                for attendee in evt_attendees:
-                    if self.account in attendee['email']: #remove owner
+                if not isinstance(evt['ATTENDEE'], (list, tuple)):
+                    evt['ATTENDEE'] = [evt['ATTENDEE']]
+                for attendee in evt['ATTENDEE']:
+                    email = re.search('(?<=mailto:).+', attendee).group(0)
+                    responseStatus = 'declined'
+                    if self.account in email:  # remove owner
                         continue
-                    if attendee['PARTSTAT'] == u'NEEDS-ACTION':
-                        responseStatus =  'needsAction'
-                    elif attendee['PARTSTAT'] == u'ACCEPTED':
+                    if attendee.params['PARTSTAT'] == u'NEEDS-ACTION':
+                        responseStatus = 'needsAction'
+                    elif attendee.params['PARTSTAT'] == u'ACCEPTED':
                         responseStatus = 'accepted'
-                    new_event['attendees'].append({'email': attendee['email'], 'responseStatus': responseStatus})
+
+                    attendeobj = {'email': email, 'responseStatus': responseStatus}
+                    if 'CN' in attendee.params:
+                        attendeobj['displayName'] = attendee.params['CN']
+
+                    new_event['attendees'].append(attendeobj)
 
             if 'DESCRIPTION' in evt:
-                new_event['description'] = evt['DESCRIPTION']
+                new_event['description'] = str(evt['DESCRIPTION'])
 
             if evt['SUMMARY']:
-                new_event['summary'] = evt['SUMMARY']
+                new_event['summary'] = evt['SUMMARY'].to_ical().decode('utf-8')
             if evt['LOCATION']:
-                new_event['location'] = evt['LOCATION']
+                new_event['location'] = evt['LOCATION'].to_ical().decode('utf-8')
             if evt['X-ALT-DESC']:
                 new_event['description'] = evt['X-ALT-DESC']
 
             if evt['DTSTART']:
-                new_event['start'] = {'dateTime': evt['DTSTART'],
-                                      'timeZone': timezone, }
+                if len(evt['DTSTART']) == 10:
+                    new_event['start'] = {'date': evt['DTSTART']}
+                else:
+                    new_event['start'] = {'dateTime': evt['DTSTART'],
+                                          'timeZone': timezone, }
             if evt['DTEND']:
-                new_event['end'] = {'dateTime': evt['DTEND'],
+                if len(evt['DTEND']) == 10:
+                    new_event['end'] = {'date': evt['DTEND']}
+                else:
+                    new_event['end'] = {'dateTime': evt['DTEND'],
                                     'timeZone': timezone,
                                     }
-            new_event['visibility'] = 'default'
-            if evt['CLASS']:
-                if evt['CLASS'] == 'PUBLIC':
-                    new_event['visibility'] = 'public'
-                else:
-                    new_event['visibility'] = 'default'
-            if evt['TRANSP']:
-                if evt['TRANSP'] == 'TRANSPARENT':
-                    new_event['transparency'] = 'transparent'
-                else:
-                    new_event['transparency'] = 'opaque'
+            new_event['visibility'] = evt.get('CLASS', 'default').lower()
+            new_event['transparency'] = evt.get('TRANSP','transparent').lower()
+
+            if evt['ORGANIZER']:
+                mailto = re.search('(?<=mailto:).+', evt['ORGANIZER']).group(0)
+                organizer = mailto
+                if 'CN' in evt['ORGANIZER'].params:
+                    organizer = evt['ORGANIZER'].params['CN']
+                new_event['attendees'].append({'displayName':organizer,'email': mailto, 'responseStatus': 'accepted'})
 
             if evt['RRULE']:
-                raw_rules = "RRULE:"
-                # Convert rules to Google format
-                raw_rules += str(evt['RRULE']).strip('vRecur(') \
-                    .replace("u'", "'") \
-                    .replace("'", "") \
-                    .replace(":", "=") \
-                    .replace(" [", "") \
-                    .replace("{", "") \
-                    .replace("}", "") \
-                    .replace("], ", ";") \
-                    .replace("])", "") \
-                    .replace(", ", ",")
-
-                lista_rules = raw_rules.split(";")
-                final_rules = ""
-
-                for elem in lista_rules:
-                    if "datetime.datetime" in elem:
-                        aux_elem = elem.replace("datetime.datetime(", "").split(",")
-                        res_elem = aux_elem[0]
-                        for n in range(1, 5):
-                            if n == 3:
-                                res_elem += "T"
-                            if int(aux_elem[n]) < 10:
-                                res_elem += "0" + aux_elem[n]
-                            else:
-                                res_elem += aux_elem[n]
-                        res_elem += "00Z"
-                        final_rules += res_elem + ";"
-                    else:
-                        final_rules += elem + ";"
-                new_event['recurrence'] = [final_rules.rstrip(";")]
+                new_event['recurrence'] = ['RRULE:'+evt['RRULE'].to_ical().decode('utf-8')]
 
             return new_event
 
         except:
             logger.exception("format_event_zimbra_to_google")
             return None
+
 
     def format_contact(self, cnt_entry, group_id):
         """
@@ -321,7 +494,7 @@ class Google:
             elif 'fullName' in uq and uq['fullName'] != '':
                 dn = uq['fullName']
             elif uq['firstName'] != '' or uq['lastName'] != '':
-                dn = uq.get('firstName','') + ' ' + uq.get('middleName','') + ' ' + uq.get('lastName','')
+                dn = uq.get('firstName', '') + ' ' + uq.get('middleName', '') + ' ' + uq.get('lastName', '')
             else:
                 dn = uq['email']
             return dn
@@ -333,12 +506,13 @@ class Google:
             :return: String with display_name
             """
 
-            full_name =  uq.get('firstName','') + ' ' + uq.get('middleName','') + ' ' + uq.get('lastName','').strip()
-            full_name = uq.get('fullName',full_name).strip()
-            if not full_name or len(full_name)<2:
+            full_name = uq.get('firstName', '') + ' ' + uq.get('middleName', '') + ' ' + uq.get('lastName', '').strip()
+            full_name = uq.get('fullName', full_name).strip()
+            if not full_name or len(full_name) < 2:
                 full_name = uq.get('nickname', uq['email'])
 
             return full_name
+
         try:
             # Constructor new_contact
             google_contact = gdata.contacts.data.ContactEntry()
@@ -347,9 +521,10 @@ class Google:
             zimbra_contact_custom_fields = cnt_entry['custom_fields']
 
             # Set the contact's email addresses.
-            if zimbra_contact_default.get('email','') != '':
+            if zimbra_contact_default.get('email', '') != '':
                 google_contact.email.append(data.Email(address=zimbra_contact_default['email'], rel=gdata.data.WORK_REL,
-                                                    primary='true', display_name=display_name(zimbra_contact_default)))
+                                                       primary='true',
+                                                       display_name=display_name(zimbra_contact_default)))
             """else:
                 err_ct = 'Impossible to register a contact without an e-mail ' + str(zimbra_contact_default)
                 logger.info(self.error_code['create_ct'] + err_ct)
@@ -379,26 +554,29 @@ class Google:
             # Set the contact's phone numbers.
             if zimbra_contact_default['workPhone'] != '':
                 google_contact.phone_number.append(gdata.data.PhoneNumber(text=zimbra_contact_default['workPhone'],
-                                                                       rel=gdata.data.WORK_REL, primary='true'))
+                                                                          rel=gdata.data.WORK_REL, primary='true'))
                 if zimbra_contact_default['homePhone'] != '':
                     google_contact.phone_number.append(gdata.data.PhoneNumber(text=zimbra_contact_default['homePhone'],
-                                                                           rel=gdata.data.HOME_REL))
+                                                                              rel=gdata.data.HOME_REL))
                 if zimbra_contact_default['mobilePhone'] != '':
-                    google_contact.phone_number.append(gdata.data.PhoneNumber(text=zimbra_contact_default['mobilePhone'],
-                                                                           rel=gdata.data.MOBILE_REL))
+                    google_contact.phone_number.append(
+                        gdata.data.PhoneNumber(text=zimbra_contact_default['mobilePhone'],
+                                               rel=gdata.data.MOBILE_REL))
             elif zimbra_contact_default['homePhone'] != '':
                 google_contact.phone_number.append(gdata.data.PhoneNumber(text=zimbra_contact_default['homePhone'],
-                                                                       rel=gdata.data.HOME_REL, primary='true'))
+                                                                          rel=gdata.data.HOME_REL, primary='true'))
                 if zimbra_contact_default['mobilePhone'] != '':
-                    google_contact.phone_number.append(gdata.data.PhoneNumber(text=zimbra_contact_default['mobilePhone'],
-                                                                           rel=gdata.data.MOBILE_REL))
+                    google_contact.phone_number.append(
+                        gdata.data.PhoneNumber(text=zimbra_contact_default['mobilePhone'],
+                                               rel=gdata.data.MOBILE_REL))
             elif zimbra_contact_default['mobilePhone'] != '':
                 google_contact.phone_number.append(gdata.data.PhoneNumber(text=zimbra_contact_default['mobilePhone'],
-                                                                       rel=gdata.data.MOBILE_REL, primary='true'))
+                                                                          rel=gdata.data.MOBILE_REL, primary='true'))
 
             # Set the contact's postal address.
-            if (zimbra_contact_default['workCity'] != '' or zimbra_contact_default['workStreet'] != '' or zimbra_contact_default['workState'] != ''
-                or zimbra_contact_default['workCountry'] != '' or zimbra_contact_default['workPostalCode'] != ''):
+            if (zimbra_contact_default['workCity'] != '' or zimbra_contact_default['workStreet'] != '' or
+                    zimbra_contact_default['workState'] != ''
+                    or zimbra_contact_default['workCountry'] != '' or zimbra_contact_default['workPostalCode'] != ''):
 
                 google_contact.structured_postal_address.append(gdata.data.StructuredPostalAddress(
                     rel=gdata.data.WORK_REL, primary='true',
@@ -409,7 +587,8 @@ class Google:
                     country=gdata.data.Country(text=zimbra_contact_default['workCountry'])))
 
                 if (zimbra_contact_default['homeCity'] != '' or zimbra_contact_default['homeStreet'] != ''
-                    or zimbra_contact_default['homeState'] != '' or zimbra_contact_default['homeCountry'] != '' or zimbra_contact_default['homePostalCode'] != ''):
+                        or zimbra_contact_default['homeState'] != '' or zimbra_contact_default['homeCountry'] != '' or
+                        zimbra_contact_default['homePostalCode'] != ''):
                     google_contact.structured_postal_address.append(gdata.data.StructuredPostalAddress(
                         rel=gdata.data.HOME_REL,
                         street=gdata.data.Street(text=zimbra_contact_default['homeStreet']),
@@ -418,7 +597,8 @@ class Google:
                         postcode=gdata.data.Postcode(text=zimbra_contact_default['homePostalCode']),
                         country=gdata.data.Country(text=zimbra_contact_default['homeCountry'])))
 
-            elif (zimbra_contact_default['homeCity'] != '' or zimbra_contact_default['homeStreet'] != '' or zimbra_contact_default['homeState'] != ''
+            elif (zimbra_contact_default['homeCity'] != '' or zimbra_contact_default['homeStreet'] != '' or
+                  zimbra_contact_default['homeState'] != ''
                   or zimbra_contact_default['homeCountry'] != '' or zimbra_contact_default['homePostalCode'] != ''):
 
                 google_contact.structured_postal_address.append(gdata.data.StructuredPostalAddress(
@@ -431,7 +611,7 @@ class Google:
 
             for item in zimbra_contact_custom_fields:
                 google_contact.user_defined_field.append(
-                    gdata.contacts.data.UserDefinedField(key=item,value=zimbra_contact_custom_fields[item]))
+                    gdata.contacts.data.UserDefinedField(key=item, value=zimbra_contact_custom_fields[item]))
 
             google_contact.group_membership_info.append(gdata.contacts.data.GroupMembershipInfo(href=group_id))
 
@@ -452,12 +632,12 @@ class Google:
         """
         calendar = {
             'summary': cal,
-            'timeZone': timezone
+            'timeZone': timezone,
         }
         try:
             created_calendar = self._service_calendar.calendars().insert(body=calendar).execute()
-            msg_success = 'Calendar {0} successful created into {1}'.format(cal,self.account)
-            logger.debug( msg_success)
+            msg_success = 'Calendar {0} successful created into {1}'.format(cal, self.account)
+            logger.debug(msg_success)
             return created_calendar['id']
 
         except gdata.client.RequestError as e:
@@ -508,6 +688,12 @@ class Google:
             logger.error(traceback.format_exc())
             return {}
 
+    def get_event(self, calendarId, eventId):
+        try:
+            return self._service_calendar.events().get(calendarId=calendarId, eventId=eventId).execute()
+        except Exception:
+            logger.error(traceback.format_exc())
+            return None
     def get_events(self, calendarId):
         try:
             events_result = self._service_calendar.events().list(calendarId=calendarId).execute()
@@ -527,7 +713,8 @@ class Google:
             logger.error(traceback.format_exc())
             return None
 
-    def delete_cal(self, calendarId):
+
+    def delete_cal(self, calendarId,only_external=False):
         """
           Function to clean all events in the Google Calendar.
           :return: Boolean, True if successful
@@ -546,7 +733,8 @@ class Google:
                 return True
             raise
         except Exception:
-            logger.exception("Error deleting calendar id[{id}] account[{account}]").format(id=calendarId,account=self.account)
+            logger.exception("Error deleting calendar id[{id}] account[{account}]").format(id=calendarId,
+                                                                                           account=self.account)
         return False
 
     def create_event(self, evt, cal_id):
@@ -658,7 +846,6 @@ class Google:
             logger.error(self.error_code['create_ct'] + 'Unexpected Error: ' + str(stdErr))
             logger.error(traceback.format_exc())
             return None
-
 
     def create_contact_group(self, addrbook, named_as=''):
         """
@@ -785,6 +972,15 @@ class Google:
             logger.error(traceback.format_exc())
             return False
 
+    def import_event(self, evt, cal_id):
+        try:
+            if 'external_event' in evt:
+                del evt['external_event']
+            x = self._service_calendar.events().import_(calendarId=cal_id, body=evt)
+            return True
+        except:
+            logger.exception("import_event")
+            return False
     def batch_insert_events(self, evts, cal_id):
         """
         Function to insert a list of events in a given calendar using batch mode.
@@ -811,21 +1007,29 @@ class Google:
                 err_msg = self.error_code['bi_evts'] + 'Failed to process: ' + str(request_id)
                 err_msg += ', Reason: ' + str(exception) + ' ' + str(response)
                 logger.error(err_msg)
-                failed_processing +=1
-                #failed_processing.append((request_id, response, exception))
+                failed_processing += 1
+                # failed_processing.append((request_id, response, exception))
             else:
-                ok_processing +=1
+                ok_processing += 1
                 pass
+
         try:
             batch = self._service_calendar.new_batch_http_request(callback=batch_handler)
             for evt in evts:
-                batch.add(self._service_calendar.events().insert(calendarId=cal_id, body=evt))
+                external_event = evt['external_event']
+                del evt['external_event']
+                if external_event:
+                    batch.add(self._service_calendar.events().import_(calendarId=cal_id, body=evt))
+                else:
+                    batch.add(self._service_calendar.events().insert(calendarId=cal_id, body=evt))
             batch.execute()
             sleep(1)
             return True, ok_processing, failed_processing
         except:
             logger.exception("batch_insert_events")
             return False, ok_processing, failed_processing
+
+    # Properly encode unicode characters.
 
     def batch_insert_contacts(self, cl):
         """
@@ -844,7 +1048,7 @@ class Google:
                 request_feed.AddInsert(entry=create_contact, batch_id_string=str(count))
                 count += 1
             response_feed = self.service_contacs.ExecuteBatch(request_feed,
-                                                        'https://www.google.com/m8/feeds/contacts/default/full/batch')
+                                                              'https://www.google.com/m8/feeds/contacts/default/full/batch')
             sleep(0.300)
             return True, response_feed
 
@@ -901,4 +1105,3 @@ class Google:
         except:
             logger.exception("batch_remove_contacts")
             return False, response_feed
-
